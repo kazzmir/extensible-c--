@@ -1,1 +1,14 @@
 C++ with support for Racket macros
+
+Write a file like so and save it (blah.rkt here)
+
+--
+#lang c++
+
+(define-syntax ..whatever..)
+
+(c++
+  ..write c++ code here..)
+--
+
+$ ./run.sh blah.rkt
