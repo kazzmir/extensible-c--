@@ -91,8 +91,7 @@
                       (define name (extract-name key))
                       (define function (datum->syntax stx (extract-function key) stx))
                       (define use
-                        (for/fold ([start (with-syntax ([function function])
-                                            #'(lambda (obj) (function obj)))])
+                        (for/fold ([start function])
                                   ([depth (in-range value)])
                                   (with-syntax ([start start])
                                     #'(lambda (stx)
