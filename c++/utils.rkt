@@ -21,6 +21,8 @@
 (define-for-syntax (list->syntax objects lexical)
   (datum->syntax lexical objects lexical))
 
+;; find all occurences of id1::id2 and wrap the expression inside a
+;; with-syntax that maps the function `id2' over the pattern variable `id1'
 (define-syntax (new-syntax stx)
   (struct ellipses-node (data) #:transparent)
   ;; converts #'(a b ... c) into (a (ellipses-node b) c)
@@ -44,6 +46,7 @@
               (loop next (cons (convert-to-ast current) out))))))
       data))
 
+  ;; pull out identifiers that look like id::id and compute their ellipses depth
   (define (traverse ast store [depth 0])
     (define (implicit-map? what)
       (regexp-match (pregexp ".*::.*")
@@ -60,20 +63,13 @@
       [(and (? implicit-map?) x)
        (define name (syntax-e x))
        (hash-set! store name (max depth (hash-ref store name (lambda () 0))))
+       #;
        (printf "Found implicit ~a\n" x)]
       [else (void)]))
 
+  ;; need to collect all identifiers that look like id::id
   (define environment (make-hash))
   (traverse (convert-to-ast stx) environment)
-  #;
-  (printf "~a\n" environment)
-
-  #;
-  (define (traverse data [environment (make-hash)])
-    (for ([object (syntax->list data)])))
-
-  #;
-  (pretty-print (convert-to-ast stx))
 
   (define (get-match regexp data)
     (cadr (regexp-match (pregexp regexp) data)))
@@ -82,8 +78,6 @@
   (define (extract-function what)
     (string->symbol (get-match ".*::(.*)" (symbol->string what))))
 
-  ;; need to collect all identifiers that look like id::id
-  
   (syntax-case stx ()
     [(_ stuff ...)
      (with-syntax ([(new-id ...) 
@@ -92,12 +86,6 @@
                                      (for/fold ([result key])
                                                ([depth (in-range value)])
                                        (list result '...))))]
-                   #;
-                   [(function ...)
-                    (for/list ([(key value) (in-hash environment)])
-                      (datum->syntax stx
-                                     (extract-function key)
-                                     stx))]
                    [(id-stuff ...)
                     (for/list ([(key value) (in-hash environment)])
                       (define name (extract-name key))
@@ -116,41 +104,18 @@
                                                                (list result '...))
                                                      stx)]
                                     [use use])
-                        #'(use #'name)))
-
-                      #;
-                      (for/fold ([result (datum->syntax stx name stx)])
-                                ([depth (in-range value)])
-                         (with-syntax ([next (datum->syntax stx (list result '...) stx)])
-                           #'(syntax->list #'next)))
-
-                      #;
-                      (datum->syntax stx
-                                     (with-syntax ([name
-                                                     (datum->syntax stx
-                                                                    (let ([name (extract-name key)])
-                                                                      (for/fold ([result name])
-                                                                                ([depth (in-range value)])
-                                                                                (list result '...)))
-                                                                    stx)])
-                                       #'(stx->list #'name)))]
-                   )
-
+                        #'(use #'name)))])
+       #;
        (pretty-print (syntax->datum (syntax 
                                        (with-syntax ([new-id id-stuff] ...)
                                          (syntax stuff ...)))))
 
      #'(with-syntax ([new-id id-stuff] ...)
          (syntax stuff ...)))])
-      
-
-  #;
-  (define-values (new out) (traverse stx))
-  #;
-  #'(with-syntax ([new-id (map function id-stuff)] ...)
-      out)
   )
 
+;; converts `foo::bar ...' into #,@(map bar foo)
+;; but it doesn't handle ellipses depths other than 1
 (define-syntax (new-syntax2 stx)
   (define (implicit-map? what)
     (regexp-match (pregexp ".*::.*") (symbol->string (syntax-e what))))
