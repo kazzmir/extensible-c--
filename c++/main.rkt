@@ -116,8 +116,9 @@
     #:literals (c++-function)
     [(c++-function type:id (name:id parameters ...) body ...)
 
-     #'(type name (){ body::compile-body ... })
+     #'(type name (){ body::compile-statement ... })
 
+     #;
      (with-syntax ([(body ...) (compile-body (syntax->list #'(body ...)))])
        #'(type name(){ body ... }))]
 
