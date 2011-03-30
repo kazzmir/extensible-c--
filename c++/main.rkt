@@ -16,14 +16,18 @@
     (printf "Expanding c++ ~a\n" code)
     (define expanded (local-expand code 'expression #f))
     (syntax-case expanded ()
-      [(sub ...) (with-syntax ([(sub* ...) (map recur (syntax->list #'(sub ...)))])
+      [(sub ...) #'(sub::recur ...)
+
+       #;
+       (with-syntax ([(sub* ...) (map recur (syntax->list #'(sub ...)))])
                    #'(sub* ...))]
       [_ code]))
   )
 
 (define-syntax (c++ stx)
   (syntax-case stx ()
-    [(_ forms ...)
+    [(_ form ...) #'(compile-c++ form::expand-c++ ...)
+     #;
      (with-syntax ([(form* ...) (map expand-c++ (syntax->list #'(forms ...)))])
        #'(compile-c++ form* ...))]))
 
@@ -82,25 +86,21 @@
 #'(foo::bar ...)
 |#
 
-(define (compile-statement line)
-  (syntax-parse line
-    [(c++-class name super-class body ...)
-     #'(class name)]
-    [else (raise-syntax-error 'compile-statement "failed" line)])
-  #;
-  (match line
-    [(list 'class name super-class body ...)
-     (format "class ~a: public ~a {
-~a
-};\n" name super-class (connect (map compile-class-body body)))]
-    [(and (? symbol?) name) (format "return ~a;" name)]
-    [(list (and (? symbol?) name) (and (? operator?) operator) args ...)
-     (format "~a ~a ~a;" name operator (map compile-expression args))]
-    [(list (and (? symbol?) name) arguments ...)
-     (format "~a(~a);" name (connect (map compile-expression arguments) ", "))]
-    [else "something"]
-    [else (error 'compile-statement "unknown statement ~a" line)]
-    ))
+(define-recursive
+  (define (compile-class line)
+    (syntax-parse line
+      #:literals (c++-class)
+      [(c++-class name super-class body ...)
+       #'(class name { body::compile-statement ... })]
+      ))
+
+  (define (compile-statement line)
+    (syntax-parse line
+      #:literals (c++-class)
+      [(c++-class blah ...)
+       (compile-class line)]
+      [else (raise-syntax-error 'compile-statement "failed" line)]))
+  )
 
 (define (compile-body code)
   (for/list ([statement code])
@@ -137,6 +137,8 @@
 (define-syntax (compile-c++ code)
   (syntax-parse code
     [(_ stuff ...)
+     #'(printf "~a\n" #''(stuff::compile-top-level ...))
+     #;
      (with-syntax ([(compiled ...) (syntax-map compile-top-level stuff ...)])
        #'(printf "~a\n" #''(compiled ...)))]))
 

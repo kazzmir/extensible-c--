@@ -12,7 +12,7 @@
 (define-syntax-rule (syntax-map function template ...)
                     (map function (syntax->list #'(template ...))))
 
-(provide syntax-map)
+(provide syntax-map define-recursive)
 
 (provide (rename-out [new-syntax syntax]))
 
@@ -142,3 +142,9 @@
      #;
      (printf "Result is ~a\n" (syntax->datum #'(quasisyntax stuff.result ...)))
      #'(quasisyntax stuff.result ...)]))
+
+(define-syntax-rule (define-recursive (define (name args ...) body ...) ...)
+                    (define-values (name ...)
+                                   (letrec ([name (lambda (args ...) body ...)]
+                                            ...)
+                                     (values name ...))))
