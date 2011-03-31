@@ -78,37 +78,54 @@
   (define (extract-function what)
     (string->symbol (get-match ".*::(.*)" (symbol->string what))))
 
+  (define (extract-ids environment)
+    (for/list ([(key value) (in-hash environment)])
+      ;; our new variable should use the same lexical scope as the pattern variable
+      ;; that is being considered. as a hack we can use the lexical scope of
+      ;; the current syntax object.
+      (datum->syntax stx
+                     (for/fold ([result key])
+                               ([depth (in-range value)])
+                               (list result '...))
+                     stx)))
+
+  (define (extract-values environment)
+    (for/list ([(key value) (in-hash environment)])
+      (define name (extract-name key))
+      (define function (datum->syntax stx (extract-function key) stx))
+      (define use
+        (for/fold ([start function])
+                  ([depth (in-range value)])
+                  ;; every time through the loop is another layer of ellipses nesting
+                  ;; so we are guaranteed to have a list of syntax objects.
+                  ;; all we have to do is apply the previous function to each object
+                  ;; in the syntax list
+                  (with-syntax ([start start])
+                    #'(lambda (stx)
+                        (map start (syntax->list stx))))))
+      ;; now we have to apply the function we built to the original pattern
+      ;; variable, making sure to apply the correct amount of ellipses
+      ;; to the pattern variable
+      (with-syntax ([name (datum->syntax stx
+                                         (for/fold ([result name])
+                                                   ([depth (in-range value)])
+                                                   (list result '...))
+                                         stx)]
+                    [use use])
+        #'(use #'name))))
+
   (syntax-case stx ()
     [(_ stuff ...)
-     (with-syntax ([(new-id ...) 
-                    (for/list ([(key value) (in-hash environment)])
-                      (datum->syntax stx
-                                     (for/fold ([result key])
-                                               ([depth (in-range value)])
-                                       (list result '...))))]
-                   [(id-stuff ...)
-                    (for/list ([(key value) (in-hash environment)])
-                      (define name (extract-name key))
-                      (define function (datum->syntax stx (extract-function key) stx))
-                      (define use
-                        (for/fold ([start function])
-                                  ([depth (in-range value)])
-                                  (with-syntax ([start start])
-                                    #'(lambda (stx)
-                                        (map start (syntax->list stx))))))
-                      (with-syntax ([name
-                                      (datum->syntax stx
-                                                     (for/fold ([result name])
-                                                               ([depth (in-range value)])
-                                                               (list result '...))
-                                                     stx)]
-                                    [use use])
-                        #'(use #'name)))])
+     (with-syntax ([(new-id ...) (extract-ids environment)]
+                   [(id-stuff ...) (extract-values environment)])
+
        #;
        (pretty-print (syntax->datum (syntax 
                                        (with-syntax ([new-id id-stuff] ...)
                                          (syntax stuff ...)))))
 
+       ;; bind foo::bar things to (map bar (syntax->list #'(foo ...))) or
+       ;; whatever the original `foo' is bound to
      #'(with-syntax ([new-id id-stuff] ...)
          (syntax stuff ...)))])
   )

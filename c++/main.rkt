@@ -5,10 +5,12 @@
                      racket/list racket/match
                      syntax/parse
                      "utils.rkt"
+                     "transformer.rkt"
                      )
          racket/match)
 
 (begin-for-syntax
+  #;
   (define (expand-c++ code)
     (define (recur code)
       (expand-c++ code))
@@ -24,6 +26,30 @@
       [_ code]))
   )
 
+(provide c++)
+#;
+(define c++ #f)
+
+(define-for-syntax (expand-c++ form)
+  (syntax-parse form
+    [(something:id rest ...)
+     (define transformer (syntax-local-value #'something (lambda () #f)))
+     (if (c++-transformer? transformer)
+       (begin
+         (printf "Expanding ~a with ~a\n" #'something transformer)
+         (expand-c++ ((c++-transformer-transformer transformer)
+                      #'(something rest ...))))
+       #'(something rest::expand-c++ ...))]
+    [(x ...) #'(x::expand-c++ ...)]
+    [x #'x]
+    ))
+
+(define-syntax (c++ stx)
+  (syntax-parse stx
+    [(_ form ...)
+     #'(printf "~a\n" '(form::expand-c++ ...))]))
+
+#;
 (define-syntax (c++ stx)
   (syntax-case stx ()
     [(_ form ...) #'(compile-c++ form::expand-c++ ...)
@@ -36,10 +62,12 @@
                       (define name #f) ...))
 
 ;; literal syntax anchors
-(define-literals c++-function c++-class)
+(define-literals c++-function c++-class c++-public
+                 c++-constructor)
 
 (begin-for-syntax
 
+  #;
 (define compile-top-level #f)
 
 (define indent-space "    ")
@@ -65,11 +93,13 @@
     [(and (? symbol?) x) (format "~a" x)]
     [else (format "unknown ~a" what)]))
 
+#;
 (define (compile-class-statement form)
   (match form
     [(list 'constructor x ...) "constructor"]
     [(list 'function x ...) (compile-top-level form)]))
 
+#;
 (define (compile-class-body body)
   (match body
     [(list 'public forms ...)
@@ -91,7 +121,22 @@
     (syntax-parse line
       #:literals (c++-class)
       [(c++-class name super-class body ...)
-       #'(class name { body::compile-statement ... })]
+       #'(class name { body::compile-class-top ... })]
+      ))
+
+  (define (compile-class-top line)
+    (syntax-parse line
+      #:literals (c++-public)
+      [(c++-public body ...)
+       #'(public: body::compile-class-statement ...)]))
+
+  (define (compile-class-statement line)
+    (syntax-parse line
+      #:literals (c++-constructor c++-function)
+      [(c++-constructor body ...)
+       #''constructor]
+      [(c++-function blah ...)
+       (compile-top-level line)]
       ))
 
   (define (compile-statement line)
@@ -99,7 +144,25 @@
       #:literals (c++-class)
       [(c++-class blah ...)
        (compile-class line)]
+      [else line]
+      #;
       [else (raise-syntax-error 'compile-statement "failed" line)]))
+
+  (define (compile-top-level code)
+    #;
+    (printf "Compiling top level ~a\n" code)
+    (syntax-parse code
+      #:literals (c++-function)
+      [(c++-function type:id (name:id parameters ...) body ...)
+
+       #'(c++-function type name (){ body::compile-statement ... })
+
+       #;
+       (with-syntax ([(body ...) (compile-body (syntax->list #'(body ...)))])
+         #'(type name(){ body ... }))]
+
+      [else (raise-syntax-error 'top-level "fail")]
+      ))
   )
 
 (define (compile-body code)
@@ -109,38 +172,30 @@
   (connect (for/list ([statement code])
              (compile-statement statement))))
 
-(define (compile-top-level* code)
-  #;
-  (printf "Compiling top level ~a\n" code)
-  (syntax-parse code
-    #:literals (c++-function)
-    [(c++-function type:id (name:id parameters ...) body ...)
-
-     #'(type name (){ body::compile-statement ... })
-
-     #;
-     (with-syntax ([(body ...) (compile-body (syntax->list #'(body ...)))])
-       #'(type name(){ body ... }))]
-
-    [else (raise-syntax-error 'top-level "fail")]
-    ))
 
 #;
   (match code
     [(list 'function type (list name parameters ...) body ...)
      (format "~a ~a(){\n~a\n}\n" type name (indent (compile-body body)))])
 
+  #;
 (set! compile-top-level compile-top-level*)
 
 )
 
+#|
+(define (convert-c++ code)
+  (syntax-parse code
+    #:literals (c++-function)
+  (match code
+    [(list '
+  code)
+     |#
+
 (define-syntax (compile-c++ code)
   (syntax-parse code
     [(_ stuff ...)
-     #'(printf "~a\n" #''(stuff::compile-top-level ...))
-     #;
-     (with-syntax ([(compiled ...) (syntax-map compile-top-level stuff ...)])
-       #'(printf "~a\n" #''(compiled ...)))]))
+     #'(printf "~a\n" (connect (map convert-c++ '(stuff::compile-top-level ...))))]))
 
 (define-syntax (stare stx)
   (syntax-case stx (c++)
@@ -153,14 +208,26 @@
   (printf "module begin! ~a\n" module-body)
   (syntax-case module-body (c++)
     [(_ stuff ... (c++ c++-forms ...))
+
      #;
      #'(#%module-begin (stare stuff ...))
 
+     (let ()
+       (define expanded (local-expand #'(#%plain-module-begin stuff ... (c++ c++-forms ...)) 'module-begin '()))
+       expanded)
+
+     #;
      (let ()
        #;
        (printf "stuff is ~a\n" #'(stuff ...))
        (define expanded (local-expand #'(#%plain-module-begin stuff ... (c++ c++-forms ...)) 'module-begin '()))
        (pretty-print (syntax->datum expanded))
+
+       #;
+       (syntax-parse expanded
+         [(_ ... (c++ forms ...))
+          ...])
+
        expanded)
      #;
      (let ()
@@ -196,13 +263,24 @@
     [(_ x ...) #'(x ...)]
     ))
 
+(define-syntax (c++-define-syntax stx)
+  (syntax-parse stx
+    [(_ name:id function)
+     #'(define-syntax name (c++-transformer function))]
+    [(_ (name:id args ...) body ...)
+     #'(define-syntax name (c++-transformer (lambda (args ...) body ...)))]))
+
 (provide (rename-out [c++-module-begin #%module-begin]
                      [c++-function function]
                      [c++-class class]
+                     [c++-public public]
+                     [c++-constructor constructor]
                      #;
                      [c++-top #%top]
+                     [c++-define-syntax define-syntax]
                      [c++-app #%app])
-         define-syntax define-syntax-rule #%datum
+         ;;define-syntax
+         define-syntax-rule #%datum
          require for-syntax
          c++
          #%top
