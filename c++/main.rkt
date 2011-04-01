@@ -7,6 +7,7 @@
                      "utils.rkt"
                      "transformer.rkt"
                      )
+         racket/list
          racket/match)
 
 (begin-for-syntax
@@ -35,19 +36,76 @@
     [(something:id rest ...)
      (define transformer (syntax-local-value #'something (lambda () #f)))
      (if (c++-transformer? transformer)
-       (begin
+       (let ()
+         (define macro (c++-transformer-transformer transformer))
          (printf "Expanding ~a with ~a\n" #'something transformer)
-         (expand-c++ ((c++-transformer-transformer transformer)
-                      #'(something rest ...))))
+         (expand-c++ (macro #'(something rest ...))))
        #'(something rest::expand-c++ ...))]
     [(x ...) #'(x::expand-c++ ...)]
     [x #'x]
     ))
 
+(define indent-space "    ")
+(define (indent what)
+  #;
+  (string-append indent-space
+                 (regexp-replace* #px"Q" 
+                                 (regexp-replace* #px"\n" what
+                                                  (format "~aQ" indent-space))
+                                 "Z"))
+  (string-append indent-space
+                 (regexp-replace* #px"\t" 
+                                 (regexp-replace* #px"\n" what
+                                                  (format "\t~a" indent-space))
+                                 "\n")))
+
+(define (canonical-c++-expression expression)
+  (match expression
+    [(list (list name args ...))
+     (format "~a(~a)" name (connect (map (lambda (x)
+                                           (format "~a" x))
+                                         args) ", "))]))
+
+(define (canonical-c++-body what)
+  (match what
+    [(list 'variable type name '= expression ...)
+     (format "~a ~a = ~a;" type name (canonical-c++-expression expression))]
+    [else ""]))
+
+(define (canonical-c++-class-body name form)
+  (match form
+    [(list 'constructor (list args ...) (list members ...)
+           body ...)
+     (format "~a(){\n~a\n}" name (indent (connect (map canonical-c++-body body))))]
+    [else (canonical-c++-top form)]))
+
+(define (canonical-c++-class name body)
+  (match body
+    [(list 'public stuff ...)
+     (format "public:\n~a" (indent (connect (map (lambda (what)
+                                                   (canonical-c++-class-body name what))
+                                                 stuff))))]))
+
+(define (canonical-c++-top form)
+  (match form
+    [(list 'function type (list name args ...) body ...)
+     (format "~a ~a(){\n~a\n}" type name (indent (canonical-c++ body)))]
+    [(list 'class name super-class body ...)
+     (format "class ~a: public ~a {\n~a\n}\n" name super-class (connect (map (lambda (what)
+                                                                               (canonical-c++-class name what))
+                                                                               body)))]
+    [else ""]))
+
+(define (connect lines [separator "\n"])
+  (apply string-append (add-between lines separator)))
+
+(define (canonical-c++ forms)
+  (connect (map canonical-c++-top forms)))
+
 (define-syntax (c++ stx)
   (syntax-parse stx
     [(_ form ...)
-     #'(printf "~a\n" '(form::expand-c++ ...))]))
+     #'(printf "~a\n" (canonical-c++ '(form::expand-c++ ...)))]))
 
 #;
 (define-syntax (c++ stx)

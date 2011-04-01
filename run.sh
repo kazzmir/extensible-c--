@@ -1,4 +1,3 @@
 #!/bin/sh
 
-PLTCOLLECTS=`pwd`:$PLTCOLLECTS
-racket $1
+PLTCOLLECTS=`pwd`:$PLTCOLLECTS racket $1
