@@ -33,6 +33,13 @@
 (define-syntax-rule (local stuff ...)
                     (local-variable stuff ...))
 
+#|
+function void loadingScreenSimpleX1(LoadingContext & context, const Level::LevelInfo & level){
+  class Logic extends Util::Logic {
+  }
+}
+|#
+
 (c++
 
 (function void (loadingScreenSimpleX1 [LoadingContext & context]
@@ -41,14 +48,13 @@
 
   (class Logic Util::Logic
     (public
-      (constructor (
-                    [local]
+      (constructor ([local]
                     [local &]
                     [local LoadingContext & context]
                     [local int & angle]
                     [local int speed])
                    ()
-                   (empty))
+                   )
       (function double (ticks [double system]) system)
       (function bool (done) (context.done))
       (function void (run) (angle += speed))))

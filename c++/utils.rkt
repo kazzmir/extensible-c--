@@ -160,6 +160,7 @@
      (printf "Result is ~a\n" (syntax->datum #'(quasisyntax stuff.result ...)))
      #'(quasisyntax stuff.result ...)]))
 
+;; define a bunch of mutually recursive functions (for use in a `begin-for-syntax' block)
 (define-syntax-rule (define-recursive (define (name args ...) body ...) ...)
                     (define-values (name ...)
                                    (letrec ([name (lambda (args ...) body ...)]
