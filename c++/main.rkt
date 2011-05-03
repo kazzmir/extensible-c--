@@ -6,18 +6,12 @@
                      syntax/parse
                      "utils.rkt"
                      "transformer.rkt"
+                     (prefix-in c++- "c++.rkt")
                      )
          racket/list
+         ;; (prefix-in c++- "c++.rkt")
+         (prefix-in c++- "c++-literals.rkt")
          racket/match)
-
-(define-syntax-rule (define-literals name ...)
-                    (begin
-                      (define name #f) ...))
-
-;; literal syntax anchors
-(define-literals c++-function c++-class c++-public
-                 c++-variable c++-=
-                 c++-constructor)
 
 (begin-for-syntax
   #;
@@ -132,16 +126,40 @@
   (define indent-space "    ")
   (define-recursive
   (define (raw-identifier name) (syntax-e name))
-  (define (canonical-c++-expression expression) "expression")
+  (define (canonical-c++-infix expression) (format "infix? ~a" (syntax->datum expression)))
+  (define (canonical-c++-expression expression)
+    (syntax-parse expression
+      [((name args ...))
+       (format "~a(~a)" (canonical-c++-expression #'name)
+                (connect (syntax-map canonical-c++-expression args ...) ", "))]
+      [(name:id) (raw-identifier #'name)]
+      [else (canonical-c++-infix expression)]))
+  (define (canonical-c++-class-body name form)
+    (syntax-parse form #:literals (c++-constructor)
+      [(c++-constructor (args ...) (members ...)
+                        body ...)
+       (format "~a(){\n~a\n}" (raw-identifier #'name)
+               (indent (connect (syntax-map canonical-c++-body body ...))))]
+    [else (canonical-c++-top form)]))
+
   (define (canonical-c++-class name body)
-    "class-body")
+    (syntax-parse body #:literals (c++-public)
+      [(c++-public stuff ...)
+       (format "public:\n~a" (indent (connect (syntax-map (lambda (what)
+                                                            (canonical-c++-class-body name what))
+                                                 stuff ...))))]))
+
   (define (canonical-c++-body body)
-    (syntax-parse body #:literals (c++-variable c++-= c++-class)
-      [(c++-variable type:identifier name:identifier c++-= expression ...)
+    (syntax-parse body #:literals (c++-variable c++--= c++-class)
+      [(c++-variable type:identifier name:identifier c++--= expression ...)
        (format "~a ~a = ~a;" (raw-identifier #'type) (raw-identifier #'name)
-               #f)]
+               (canonical-c++-expression #'(expression ...)))]
+      [(variable:identifier assignment:c++-assignment-operator expression ...)
+       (format "~a ~a ~a;" (raw-identifier #'variable)
+               (raw-identifier #'assignment)
+               (canonical-c++-expression #'(expression ...)))]
       [(c++-for (initializer condition increment) body ...)
-       (format "for (~a; ~a ~a){\n~a\n}"
+       (format "for (~a; ~a; ~a){\n~a\n}"
                (canonical-c++-expression #'initializer)
                (canonical-c++-expression #'condition)
                (canonical-c++-expression #'increment)
@@ -152,7 +170,7 @@
                (raw-identifier #'super-class)
                (connect (syntax-map (lambda (what) (canonical-c++-class #'name what))
                                     body ...)))]
-      [else "#f"]
+      [else (format "body? ~a" (syntax->datum body))]
       ))
 
   (define (canonical-c++-top form)
@@ -416,7 +434,7 @@
                      [c++-function function]
                      [c++-class class]
                      [c++-variable variable]
-                     [c++-= =]
+                     [c++--= =] [c++-+= +=]
                      [c++-public public]
                      [c++-constructor constructor]
                      #;
