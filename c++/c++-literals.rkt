@@ -13,4 +13,4 @@
 (define+provide-literals function class public
                          variable
                          constructor
-                         -= +=)
+                         -= += =)

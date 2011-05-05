@@ -42,10 +42,13 @@
        (let ()
          (define macro (c++-transformer-transformer transformer))
          (printf "Expanding ~a with ~a\n" #'something transformer)
-         (expand-c++ (macro #'(something rest ...))))
-       #'(something rest::expand-c++ ...))]
-    [(x ...) #'(x::expand-c++ ...)]
-    [x #'x]
+         (expand-c++ (macro (datum->syntax form #'(something rest ...) form form))))
+       (syntax/location+properties
+         form form
+         (something rest::expand-c++ ...)))]
+    [(x ...) (syntax/location+properties
+               form form (x::expand-c++ ...))]
+    [x form]
     ))
 
 (define indent-space "    ")
@@ -126,20 +129,24 @@
   (define indent-space "    ")
   (define-recursive
   (define (raw-identifier name) (syntax-e name))
-  (define (canonical-c++-infix expression) (format "infix? ~a" (syntax->datum expression)))
+  (define (canonical-c++-infix expression)
+    (format "infix? ~a" (syntax->datum expression)))
   (define (canonical-c++-expression expression)
     (syntax-parse expression
       [((name args ...))
-       (format "~a(~a)" (canonical-c++-expression #'name)
-                (connect (syntax-map canonical-c++-expression args ...) ", "))]
-      [(name:id) (raw-identifier #'name)]
+       (format "~a(~a)" (canonical-c++-expression #'(name))
+               (connect (syntax-map canonical-c++-expression (args) ...) ", "))]
+      [(name:id) (format "~a" (raw-identifier #'name))]
+      [(constant:number) (format "~a" (raw-identifier #'constant))]
       [else (canonical-c++-infix expression)]))
   (define (canonical-c++-class-body name form)
     (syntax-parse form #:literals (c++-constructor)
       [(c++-constructor (args ...) (members ...)
                         body ...)
-       (format "~a(){\n~a\n}" (raw-identifier #'name)
-               (indent (connect (syntax-map canonical-c++-body body ...))))]
+       (format "~a(){\n~a\n}" (raw-identifier name)
+               (indent (connect (syntax-map (lambda (x)
+                                              (canonical-c++-body x #f))
+                                            body ...))))]
     [else (canonical-c++-top form)]))
 
   (define (canonical-c++-class name body)
@@ -147,39 +154,66 @@
       [(c++-public stuff ...)
        (format "public:\n~a" (indent (connect (syntax-map (lambda (what)
                                                             (canonical-c++-class-body name what))
-                                                 stuff ...))))]))
+                                                 stuff ...)
+                                              "\n\n")))]))
 
-  (define (canonical-c++-body body)
-    (syntax-parse body #:literals (c++-variable c++--= c++-class)
-      [(c++-variable type:identifier name:identifier c++--= expression ...)
+  (define (canonical-c++-declaration declaration)
+    (syntax-parse declaration #:literals (c++-variable c++-=)
+      [(c++-variable type:identifier name:identifier)
+       (format "~a ~a" (raw-identifier #'type) (raw-identifier #'name))]
+      [(c++-variable type:identifier name:identifier c++-= expression ...)
+       (format "~a ~a = ~a" (raw-identifier #'type) (raw-identifier #'name)
+               (canonical-c++-expression #'(expression ...)))]
+      ))
+
+  (define (canonical-c++-body body last?)
+    (syntax-parse body #:literals (c++-variable c++-= c++-class)
+      [(c++-variable type:identifier name:identifier c++-= expression ...)
        (format "~a ~a = ~a;" (raw-identifier #'type) (raw-identifier #'name)
                (canonical-c++-expression #'(expression ...)))]
       [(variable:identifier assignment:c++-assignment-operator expression ...)
        (format "~a ~a ~a;" (raw-identifier #'variable)
                (raw-identifier #'assignment)
                (canonical-c++-expression #'(expression ...)))]
+      [(array index:c++-inside-curlies c++-= expression ...)
+       (format "~a[~a] = ~a;" (canonical-c++-expression #'array)
+               (canonical-c++-expression #'index)
+               (canonical-c++-expression #'(expression ...)))]
       [(c++-for (initializer condition increment) body ...)
        (format "for (~a; ~a; ~a){\n~a\n}"
-               (canonical-c++-expression #'initializer)
+               (canonical-c++-declaration #'initializer)
                (canonical-c++-expression #'condition)
                (canonical-c++-expression #'increment)
-               (indent (connect (syntax-map canonical-c++-body body ...))))]
+               (indent (connect (syntax-map (lambda (x)
+                                              (canonical-c++-body x #f))
+                                            body ...))))]
       [(c++-class name:id super-class:id body ...)
        (format "class ~a: public ~a {\n~a\n};\n"
                (raw-identifier #'name)
                (raw-identifier #'super-class)
                (connect (syntax-map (lambda (what) (canonical-c++-class #'name what))
                                     body ...)))]
-      [else (format "body? ~a" (syntax->datum body))]
+      [else (begin
+              (define code (canonical-c++-expression
+                             (with-syntax ([body body])
+                               #'(body))))
+              (if last?
+                (format "return ~a;" code)
+                (format "~a;" code)))]
       ))
 
   (define (canonical-c++-top form)
+    (define (last? stuff what)
+      (eq? (last stuff) what))
     #;
     (printf "top ~a\n" (syntax->datum form))
     (syntax-parse form #:literals (c++-function c++-class)
       [(c++-function type:id (name:id arg ...) body ...)
        (format "~a ~a(){\n~a\n}" (raw-identifier #'type) (raw-identifier #'name)
-               (indent (connect (syntax-map canonical-c++-body body ...))))]
+               (indent (connect (syntax-map (lambda (x)
+                                              (canonical-c++-body x (last? (syntax->list #'(body ...)) x)))
+                                            body
+                                            ...))))]
       [else "?"]
       ))
 
@@ -434,7 +468,8 @@
                      [c++-function function]
                      [c++-class class]
                      [c++-variable variable]
-                     [c++--= =] [c++-+= +=]
+                     [c++-= =]
+                     [c++--= -=] [c++-+= +=]
                      [c++-public public]
                      [c++-constructor constructor]
                      #;

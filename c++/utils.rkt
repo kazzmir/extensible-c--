@@ -12,9 +12,9 @@
 (define-syntax-rule (syntax-map function template ...)
                     (map function (syntax->list #'(template ...))))
 
-(provide syntax-map define-recursive)
-
-(provide (rename-out [new-syntax syntax]))
+(provide syntax-map define-recursive
+         (rename-out [new-syntax syntax])
+         syntax/location+properties)
 
 (define-for-syntax syntax-list? stx-list?)
 
@@ -23,7 +23,7 @@
 
 ;; find all occurences of id1::id2 and wrap the expression inside a
 ;; with-syntax that maps the function `id2' over the pattern variable `id1'
-(define-syntax (new-syntax stx)
+(define-for-syntax (do-new-syntax make-syntax stx)
   (struct ellipses-node (data) #:transparent)
   ;; converts #'(a b ... c) into (a (ellipses-node b) c)
   ;; basically just puts ellipses in front
@@ -71,6 +71,9 @@
   (define environment (make-hash))
   (traverse (convert-to-ast stx) environment)
 
+  #;
+  (printf "~a\n" environment)
+
   (define (get-match regexp data)
     (cadr (regexp-match (pregexp regexp) data)))
   (define (extract-name what)
@@ -87,12 +90,13 @@
                      (for/fold ([result key])
                                ([depth (in-range value)])
                                (list result '...))
+                     stx
                      stx)))
 
   (define (extract-values environment)
     (for/list ([(key value) (in-hash environment)])
       (define name (extract-name key))
-      (define function (datum->syntax stx (extract-function key) stx))
+      (define function (datum->syntax stx (extract-function key) stx stx))
       (define use
         (for/fold ([start function])
                   ([depth (in-range value)])
@@ -110,25 +114,59 @@
                                          (for/fold ([result name])
                                                    ([depth (in-range value)])
                                                    (list result '...))
+                                         stx
                                          stx)]
                     [use use])
         #'(use #'name))))
 
   (syntax-case stx ()
-    [(_ stuff ...)
+    [stuff
      (with-syntax ([(new-id ...) (extract-ids environment)]
                    [(id-stuff ...) (extract-values environment)])
+       #;
+       (printf "new id ~a id-stuff ~a\n" #'(new-id ...) #'(id-stuff ...))
 
        #;
        (pretty-print (syntax->datum (syntax 
                                        (with-syntax ([new-id id-stuff] ...)
-                                         (syntax stuff ...)))))
+                                         (syntax stuff)))))
 
        ;; bind foo::bar things to (map bar (syntax->list #'(foo ...))) or
        ;; whatever the original `foo' is bound to
+     (with-syntax ([make-syntax make-syntax])
      #'(with-syntax ([new-id id-stuff] ...)
-         (syntax stuff ...)))])
+         (make-syntax stuff))))])
   )
+
+(define-syntax (new-syntax stx)
+  (syntax-parse stx
+    [(_ x) (do-new-syntax #'syntax #'x)]))
+
+(define (relocate source properties original)
+  (datum->syntax original (syntax-e original) source properties original))
+
+(define-syntax (syntax/location+properties stx)
+  (syntax-parse stx
+    [(_ source properties template)
+     (if (and (symbol? (syntax-e #'template))
+              (syntax-pattern-variable? (syntax-local-value #'template (lambda () #f))))
+       #'#'template
+       (begin
+         #;
+         (printf "~a paren shape ~a\n" #'properties (syntax-property #'properties 'paren-shape))
+         (with-syntax ([new (do-new-syntax #'syntax #'template)])
+           #'(relocate source properties new))
+
+           #;
+         #'(relocate source properties (do-new-syntax #'syntax #'template)))
+
+       #;
+       #'(datum->syntax stx (syntax-e (do-new-syntax #'syntax #'template))
+                        source properties stx)
+       #;
+       (do-new-syntax #'(lambda (stx)
+                          (datum->syntax stx (syntax-e stx) source properties stx))
+                      #'template))]))
 
 ;; converts `foo::bar ...' into #,@(map bar foo)
 ;; but it doesn't handle ellipses depths other than 1
