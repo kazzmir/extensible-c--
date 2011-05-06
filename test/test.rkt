@@ -82,7 +82,7 @@ function void loadingScreenSimpleX1(LoadingContext & context, const Level::Level
         (for ([variable int i = 0]
               [i < max]
               [i += 1])
-          (variable double x = (cos (Util::radians angle + 360 / max * i)) * 15)
-          (variable double y = (sin (Util::radians angle + 360 / max * i)) * 15)
+          (variable double x = (cos [(Util::radians angle) + 360 / max * i]) * 15)
+          (variable double y = (sin [(Util::radians angle) + 360 / max * i]) * 15)
           ((work.translucent).circleFill [middleX + x] [middleY + y] 2 colors{i}))))))
 )

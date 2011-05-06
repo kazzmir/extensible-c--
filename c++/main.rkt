@@ -130,12 +130,59 @@
   (define-recursive
   (define (raw-identifier name) (syntax-e name))
   (define (canonical-c++-infix expression)
-    (format "infix? ~a" (syntax->datum expression)))
-  (define (canonical-c++-expression expression)
     (syntax-parse expression
-      [((name args ...))
-       (format "~a(~a)" (canonical-c++-expression #'(name))
-               (connect (syntax-map canonical-c++-expression (args) ...) ", "))]
+      [(stuff ...)
+       (define output (syntax-map (lambda (x)
+                                    (syntax-parse x
+                                      [what:c++-operator (format "~a" (raw-identifier #'what))]
+                                      [any (canonical-c++-expression #'(any))]))
+                                  stuff ...))
+       (connect output " ")]))
+
+  #;
+  (define (canonical-c++-expression expression)
+    (struct binary-operator (precedence association) #:transparent)
+    (define (parse input table precedence left current)
+      (syntax-parse input
+        [(constant:number rest ...) (parse #'(rest ...) table precedence left #'constant)]
+        [(operator:c++-binary-operator rest ...)
+         (match (hash-ref table #'operator #f)
+           [(binary-operator new-precedence association)
+            (define check (case association
+                            [(right) >=]
+                            [(left) >]))
+            (if (check new-precedence precedence)
+              (let ()
+                (define-values (parsed unparsed)
+                               (parse #'(rest ...) table new-precedence
+                                      (lambda (what)
+                                        (if (not current)
+                                          (with-syntax ([what what])
+                                            #'(operator what))
+                                          (with-syntax ([current current]
+                                                        [what what])
+                                            #'(current operator what)))
+                                          #f)))
+                (parse unparsed table precedence left parsed))
+              (values (left current) input))]
+           [else (raise-syntax-error 'parse "unknown")])]
+        [(something:identifier rest ...) (parse #'(rest ...) table precedence left #'something)]
+        [() (values (left current) '())]
+        [else (raise-syntax-error 'parse "what is ~a" input)]))
+    (define table (hash #'c++-/ (binary-operator 100 'left)))
+    (define-values (parsed unparsed)
+                   (parse expression table 0 (lambda (x) x) #f))
+    parsed)
+
+  (define (canonical-c++-expression expression)
+    (syntax-parse expression #:literals (c++-sizeof)
+      [((c++-sizeof arg))
+       (format "sizeof(~a)" (canonical-c++-expression #'(arg)))]
+      [(infix:c++-inside-brackets) (canonical-c++-infix #'infix)]
+      [((name arg ...))
+       (format "~a(~a)"
+               (canonical-c++-expression #'(name))
+               (connect (syntax-map canonical-c++-expression (arg) ...) ", "))]
       [(name:id) (format "~a" (raw-identifier #'name))]
       [(constant:number) (format "~a" (raw-identifier #'constant))]
       [else (canonical-c++-infix expression)]))
@@ -176,7 +223,8 @@
                (raw-identifier #'assignment)
                (canonical-c++-expression #'(expression ...)))]
       [(array index:c++-inside-curlies c++-= expression ...)
-       (format "~a[~a] = ~a;" (canonical-c++-expression #'array)
+       (format "~a[~a] = ~a;"
+               (canonical-c++-expression #'(array))
                (canonical-c++-expression #'index)
                (canonical-c++-expression #'(expression ...)))]
       [(c++-for (initializer condition increment) body ...)
@@ -470,8 +518,10 @@
                      [c++-variable variable]
                      [c++-= =]
                      [c++--= -=] [c++-+= +=]
+                     [c++-- -] [c++-/ /]
                      [c++-public public]
                      [c++-constructor constructor]
+                     [c++-sizeof sizeof]
                      #;
                      [c++-top #%top]
                      [c++-define-syntax define-syntax]
