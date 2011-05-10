@@ -178,7 +178,16 @@
     (syntax-parse expression #:literals (c++-sizeof)
       [((c++-sizeof arg))
        (format "sizeof(~a)" (canonical-c++-expression #'(arg)))]
+      [((name:id index:c++-inside-curlies))
+       (format "~a[~a]"
+               (raw-identifier #'name)
+               (canonical-c++-expression #'index))]
       [(infix:c++-inside-brackets) (canonical-c++-infix #'infix)]
+      [((expression flow1:c++-dotted-identifier arg ...))
+       (format "~a~a(~a)"
+               (canonical-c++-expression #'(expression))
+               (canonical-c++-expression #'(flow1))
+               (connect (syntax-map canonical-c++-expression (arg) ...) ", "))]
       [((name arg ...))
        (format "~a(~a)"
                (canonical-c++-expression #'(name))
@@ -512,6 +521,36 @@
     [(_ (name:id args ...) body ...)
      #'(define-syntax name (c++-transformer (lambda (args ...) body ...)))]))
 
+(define-syntax c++-define-syntax-rule
+  (lambda (stx)
+    (let-values ([(err) (lambda (what . xs)
+                          (apply raise-syntax-error
+                                 'define-syntax-rule what stx xs))])
+      (syntax-case stx ()
+        [(dr (name . pattern) template)
+         (identifier? #'name)
+         (syntax/loc stx
+                     (c++-define-syntax name
+                       (lambda (user-stx)
+                         (syntax-case* user-stx () free-identifier=?
+                                        [(_ . pattern) (syntax/loc user-stx template)]
+                                        [_ (let*-values
+                                             ([(sexpr) (syntax->datum user-stx)]
+                                              [(msg)
+                                               (if (pair? sexpr)
+                                                 (format "use does not match pattern: ~.s"
+                                                         (cons (car sexpr) 'pattern))
+                                                 (if (symbol? sexpr)
+                                                   (format "use does not match pattern: ~.s"
+                                                           (cons sexpr 'pattern))
+                                                   (error 'internal-error
+                                                          "something bad happened")))])
+                                             (raise-syntax-error #f msg user-stx))]))))]
+        [(_ (name . ptrn) tmpl)         (err "expected an identifier" #'name)]
+        [(_ (name . ptrn))              (err "missing template")]
+        [(_ (name . ptrn) tmpl etc . _) (err "too many forms" #'etc)]
+        [(_ head . _)                   (err "invalid pattern" #'head)]))))
+
 (provide (rename-out [c++-module-begin #%module-begin]
                      [c++-function function]
                      [c++-class class]
@@ -525,9 +564,11 @@
                      #;
                      [c++-top #%top]
                      [c++-define-syntax define-syntax]
+                     [c++-define-syntax-rule define-syntax-rule]
                      [c++-app #%app])
          ;;define-syntax
-         define-syntax-rule #%datum
+         ;; define-syntax-rule
+         #%datum
          require for-syntax
          c++
          #%top

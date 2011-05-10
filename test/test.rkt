@@ -5,6 +5,9 @@
 #;
 (define-syntax (function stx) #'1)
 
+(define-syntax-rule (define-color name red green blue)
+                    (variable int name = (Graphics::makeColor red green blue)))
+
 #;
 (define-syntax (local stx)
   #;
@@ -65,10 +68,19 @@ function void loadingScreenSimpleX1(LoadingContext & context, const Level::Level
                    ([local Graphics::Bitmap work 40 40]
                     [local Graphics::Bitmap original 40 40])
         (original.BlitFromScreen 0 0)
+
+        (define-color color1 0 0 0)
+        (define-color color2 0x00 0x99 0xff)
+        (define-color color3 0xff 0x22 0x33)
+        (define-color color4 0x44 0x77 0x33)
+
+        #|
         (variable int color1 = (Graphics::makeColor 0 0 0))
         (variable int color2 = (Graphics::makeColor 0x00 0x99 0xff))
         (variable int color3 = (Graphics::makeColor 0xff 0x22 0x33))
         (variable int color4 = (Graphics::makeColor 0x44 0x77 0x33))
+        |#
+
         (color{0} = color1)
         (color{1} = color2)
         (color{2} = color3)
@@ -84,5 +96,5 @@ function void loadingScreenSimpleX1(LoadingContext & context, const Level::Level
               [i += 1])
           (variable double x = (cos [(Util::radians angle) + 360 / max * i]) * 15)
           (variable double y = (sin [(Util::radians angle) + 360 / max * i]) * 15)
-          ((work.translucent).circleFill [middleX + x] [middleY + y] 2 colors{i}))))))
+          ((work.translucent).circleFill [middleX + x] [middleY + y] 2 [colors{i}]))))))
 )

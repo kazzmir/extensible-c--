@@ -6,7 +6,8 @@
 (provide assignment-operator
          inside-curlies inside-brackets
          binary-operator
-         operator)
+         operator
+         dotted-identifier)
 
 (define-literal-set operators #:for-template
                     (+= -= - /))
@@ -28,6 +29,9 @@
 (define-syntax-class binary-operator
                      #:literal-sets (operators)
                      [pattern (~or - /)])
+
+(define-syntax-class dotted-identifier
+                     [pattern x:id #:when (regexp-match #rx"^\\...*" (symbol->string (syntax-e #'x)))])
 
 #;
 (define-syntax-class assignment-operator
