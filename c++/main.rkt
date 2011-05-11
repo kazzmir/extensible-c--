@@ -193,6 +193,7 @@
                (canonical-c++-expression #'(name))
                (connect (syntax-map canonical-c++-expression (arg) ...) ", "))]
       [(name:id) (format "~a" (raw-identifier #'name))]
+      [(constant:str) (format "\"~a\"" (raw-identifier #'constant))]
       [(constant:number) (format "~a" (raw-identifier #'constant))]
       [else (canonical-c++-infix expression)]))
   (define (canonical-c++-class-body name form)
@@ -264,7 +265,11 @@
       (eq? (last stuff) what))
     #;
     (printf "top ~a\n" (syntax->datum form))
-    (syntax-parse form #:literals (c++-function c++-class)
+    (syntax-parse form #:literals (c++-include c++-function c++-class)
+      [(c++-include file:str ...)
+       (connect (syntax-map (lambda (x)
+                              (format "#include ~a" (syntax-e x)))
+                            file ...))]
       [(c++-function type:id (name:id arg ...) body ...)
        (format "~a ~a(){\n~a\n}" (raw-identifier #'type) (raw-identifier #'name)
                (indent (connect (syntax-map (lambda (x)
@@ -276,7 +281,7 @@
 
   (define (indent what)
     (string-append indent-space
-                   (regexp-replace* #px"\t" 
+                   (regexp-replace* "\t"
                                     (regexp-replace* #px"\n" what
                                                      (format "\t~a" indent-space))
                                     "\n")))
@@ -521,6 +526,7 @@
     [(_ (name:id args ...) body ...)
      #'(define-syntax name (c++-transformer (lambda (args ...) body ...)))]))
 
+;; copy and pasted from racket/private/misc.rkt
 (define-syntax c++-define-syntax-rule
   (lambda (stx)
     (let-values ([(err) (lambda (what . xs)
@@ -561,6 +567,7 @@
                      [c++-public public]
                      [c++-constructor constructor]
                      [c++-sizeof sizeof]
+                     [c++-include include]
                      #;
                      [c++-top #%top]
                      [c++-define-syntax define-syntax]
