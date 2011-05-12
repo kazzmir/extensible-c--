@@ -7,6 +7,7 @@
                      syntax/stx
                      )
          syntax/stx
+         syntax/parse
          )
 
 (define-syntax-rule (syntax-map function template ...)
@@ -204,3 +205,16 @@
                                    (letrec ([name (lambda (args ...) body ...)]
                                             ...)
                                      (values name ...))))
+
+#|
+(provide syntax-parse/error)
+(define-syntax (syntax-parse/error stx)
+  (define-splicing-syntax-class attribute
+    [pattern (~seq kind:keyword stuff)])
+  (syntax-parse stx
+    [(_ input attribute:attribute ... [pattern body ...] ...)
+     (with-syntax ([((attribute-stuff ...) ...) #'(attribute ...)])
+     #'(syntax-parse input
+         attribute-stuff ... ...
+         [pattern body ...] ...))]))
+|#

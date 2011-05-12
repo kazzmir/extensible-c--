@@ -197,13 +197,39 @@
       [(constant:number) (format "~a" (raw-identifier #'constant))]
       [else (canonical-c++-infix expression)]))
   (define (canonical-c++-class-body name form)
+    (define-syntax-class declaration
+                         #:literals (c++-local c++-=)
+      [pattern (type:identifier name:identifier)
+               #:with final (format "~a ~a"
+                                    (raw-identifier #'type)
+                                    (raw-identifier #'name))
+               #:with init #f]
+      [pattern (type:identifier name:identifier c++-= expression ...)
+               #:with final (format "~a ~a"
+                                    (raw-identifier #'type)
+                                    (raw-identifier #'name))
+               #:with init (format "~a(~a)"
+                                   (raw-identifier #'name)
+                                   (canonical-c++-expression #'(expression ...)))]
+      )
     (syntax-parse form #:literals (c++-constructor)
-      [(c++-constructor (args ...) (members ...)
+      [(c++-constructor (args ...) (member:declaration ...)
                         body ...)
-       (format "~a(){\n~a\n}" (raw-identifier name)
+       (define (initializer inits)
+         (let ([use (filter (lambda (init) (syntax-e init)) inits)])
+           (if (null? use) ""
+             (string-append ":\n"
+                            (connect (map (lambda (what) (syntax-e what)) use))))))
+       (format "~a()~a{\n~a\n}\n~a"
+               (raw-identifier name)
+               (initializer (syntax->list #'(member.init ...)))
                (indent (connect (syntax-map (lambda (x)
+                                              (printf "body ~a\n" x)
                                               (canonical-c++-body x #f))
-                                            body ...))))]
+                                            body ...)))
+               (connect (syntax-map (lambda (x)
+                                      (format "~a;" (syntax-e x)))
+                                    member.final ...)))]
     [else (canonical-c++-top form)]))
 
   (define (canonical-c++-class name body)
@@ -212,7 +238,12 @@
        (format "public:\n~a" (indent (connect (syntax-map (lambda (what)
                                                             (canonical-c++-class-body name what))
                                                  stuff ...)
-                                              "\n\n")))]))
+                                              "\n\n")))]
+      [(stuff ...)
+       (indent (connect (syntax-map (lambda (what)
+                                      (canonical-c++-class-body name what))
+                                    stuff ...)))]
+      ))
 
   (define (canonical-c++-declaration declaration)
     (syntax-parse declaration #:literals (c++-variable c++-=)
@@ -221,17 +252,23 @@
       [(c++-variable type:identifier name:identifier c++-= expression ...)
        (format "~a ~a = ~a" (raw-identifier #'type) (raw-identifier #'name)
                (canonical-c++-expression #'(expression ...)))]
+      
       ))
 
   (define (canonical-c++-body body last?)
+    (define variable-failure "declaring a variable must have the form 'variable <type> <name> = <expression ...>'")
     (syntax-parse body #:literals (c++-variable c++-= c++-class)
-      [(c++-variable type:identifier name:identifier c++-= expression ...)
+      [(~describe variable-failure (c++-variable ~!
+                     type:identifier name:identifier c++-= expression ...))
        (format "~a ~a = ~a;" (raw-identifier #'type) (raw-identifier #'name)
                (canonical-c++-expression #'(expression ...)))]
       [(variable:identifier assignment:c++-assignment-operator expression ...)
        (format "~a ~a ~a;" (raw-identifier #'variable)
                (raw-identifier #'assignment)
                (canonical-c++-expression #'(expression ...)))]
+      #;
+      [(c++-variable blah ...)
+       (raise-syntax-error 'variable "declaring a variable must have the form 'variable <type> <name> = <expression ...>'" body)]
       [(array index:c++-inside-curlies c++-= expression ...)
        (format "~a[~a] = ~a;"
                (canonical-c++-expression #'(array))
@@ -251,6 +288,7 @@
                (raw-identifier #'super-class)
                (connect (syntax-map (lambda (what) (canonical-c++-class #'name what))
                                     body ...)))]
+      [() ""]
       [else (begin
               (define code (canonical-c++-expression
                              (with-syntax ([body body])
@@ -265,18 +303,52 @@
       (eq? (last stuff) what))
     #;
     (printf "top ~a\n" (syntax->datum form))
-    (syntax-parse form #:literals (c++-include c++-function c++-class)
-      [(c++-include file:str ...)
-       (connect (syntax-map (lambda (x)
+    (define-syntax-class symbol-or-string
+      [pattern what:str #:with raw (format "\"~a\"" (syntax-e #'what))]
+      [pattern what:identifier #:with raw (syntax-e #'what)])
+    (define-syntax-class declaration
+                         #:literals (c++-template c++-class c++-static)
+      [pattern (c++-static type:identifier variable:identifier c++-= expression ...)
+               #:with final (format "static ~a ~a = ~a"
+                                    (raw-identifier #'type)
+                                    (raw-identifier #'variable)
+                                    (canonical-c++-expression #'(expression ...)))]
+      [pattern (c++-struct name:identifier body ...)
+               #:with final (format "struct ~a{\n~a\n}"
+                                    (raw-identifier #'name)
+                                    (indent (connect (syntax-map
+                                                       (lambda (form)
+                                                         (canonical-c++-class-body #'name form))
+                                                       body ...))))]
+      [pattern (c++-template (c++-class template-type:identifier)
+                             type:identifier variable:identifier)
+               #:with final (format "template <class ~a> ~a ~a"
+                                    (raw-identifier #'template-type)
+                                    (raw-identifier #'type)
+                                    (raw-identifier #'variable))])
+   
+    (syntax-parse form #:literals (c++-include c++-function c++-class
+                                   c++-using c++-namespace)
+      [(c++-include file:symbol-or-string ...)
+       (string-append (connect (syntax-map (lambda (x)
                               (format "#include ~a" (syntax-e x)))
-                            file ...))]
+                            file.raw ...))
+                      ;; add an extra newline after all #include's
+                      "\n")]
+      [(c++-namespace name:identifier stuff ...)
+       (format "namespace ~a{\n~a\n}"
+               (raw-identifier #'name)
+               (indent (connect (syntax-map canonical-c++-top stuff ...))))]
+      [(c++-using c++-namespace what:identifier)
+       (format "using namespace ~a;" (raw-identifier #'what))]
       [(c++-function type:id (name:id arg ...) body ...)
        (format "~a ~a(){\n~a\n}" (raw-identifier #'type) (raw-identifier #'name)
                (indent (connect (syntax-map (lambda (x)
                                               (canonical-c++-body x (last? (syntax->list #'(body ...)) x)))
                                             body
                                             ...))))]
-      [else "?"]
+      [declaration:declaration (format "~a;" (syntax-e #'declaration.final))]
+      [else (raise-syntax-error 'top "unknown form" form)]
       ))
 
   (define (indent what)
@@ -500,7 +572,10 @@
        (define expanded (expand-c++ #'(c++-forms ...) context))
        #;
        (define expanded (local-expand #'(c++-forms ...) 'module-begin #f))
-       (pretty-print (syntax->datum expanded)))])
+       (pretty-print (syntax->datum expanded)))]
+    [(_ stuff ...)
+     #'(#%plain-module-begin stuff ...)]
+    )
   #;
   #'(#%plain-module-begin 1))
 
@@ -527,6 +602,7 @@
      #'(define-syntax name (c++-transformer (lambda (args ...) body ...)))]))
 
 ;; copy and pasted from racket/private/misc.rkt
+;; syntax-case** was changed to syntax-case
 (define-syntax c++-define-syntax-rule
   (lambda (stx)
     (let-values ([(err) (lambda (what . xs)
@@ -538,20 +614,19 @@
          (syntax/loc stx
                      (c++-define-syntax name
                        (lambda (user-stx)
-                         (syntax-case* user-stx () free-identifier=?
-                                        [(_ . pattern) (syntax/loc user-stx template)]
-                                        [_ (let*-values
-                                             ([(sexpr) (syntax->datum user-stx)]
-                                              [(msg)
-                                               (if (pair? sexpr)
+                         (syntax-case user-stx ()
+                           [(_ . pattern) (syntax/loc user-stx template)]
+                           [_ (let*-values ([(sexpr) (syntax->datum user-stx)]
+                                            [(msg)
+                                             (if (pair? sexpr)
+                                               (format "use does not match pattern: ~.s"
+                                                       (cons (car sexpr) 'pattern))
+                                               (if (symbol? sexpr)
                                                  (format "use does not match pattern: ~.s"
-                                                         (cons (car sexpr) 'pattern))
-                                                 (if (symbol? sexpr)
-                                                   (format "use does not match pattern: ~.s"
-                                                           (cons sexpr 'pattern))
-                                                   (error 'internal-error
-                                                          "something bad happened")))])
-                                             (raise-syntax-error #f msg user-stx))]))))]
+                                                         (cons sexpr 'pattern))
+                                                 (error 'internal-error
+                                                        "something bad happened")))])
+                                (raise-syntax-error #f msg user-stx))]))))]
         [(_ (name . ptrn) tmpl)         (err "expected an identifier" #'name)]
         [(_ (name . ptrn))              (err "missing template")]
         [(_ (name . ptrn) tmpl etc . _) (err "too many forms" #'etc)]
@@ -568,6 +643,11 @@
                      [c++-constructor constructor]
                      [c++-sizeof sizeof]
                      [c++-include include]
+                     [c++-template template]
+                     [c++-using using] [c++-namespace namespace]
+                     [c++-static static]
+                     [c++-struct struct]
+                     [c++-local local]
                      #;
                      [c++-top #%top]
                      [c++-define-syntax define-syntax]
@@ -577,6 +657,8 @@
          ;; define-syntax-rule
          #%datum
          require for-syntax
+         provide define
+         syntax prefix-in
          c++
          #%top
          (for-meta 1 #%app #%top #%datum

@@ -12,7 +12,10 @@
 ;; literal syntax anchors
 (define+provide-literals function class public
                          variable
-                         include
+                         local
+                         include struct
+                         using namespace
+                         template static
                          constructor
                          -= += =
                          - / sizeof)

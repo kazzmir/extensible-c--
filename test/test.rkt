@@ -65,8 +65,8 @@ function void loadingScreenSimpleX1(LoadingContext & context, const Level::Level
     (public
       (constructor ([local int & angle]
                     [local const int speed])
-                   ([local Graphics::Bitmap work 40 40]
-                    [local Graphics::Bitmap original 40 40])
+                   ([Graphics::Bitmap work 40 40]
+                    [Graphics::Bitmap original 40 40])
         (original.BlitFromScreen 0 0)
 
         (define-color color1 0 0 0)
