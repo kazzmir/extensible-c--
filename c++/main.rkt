@@ -13,27 +13,10 @@
          (prefix-in c++- "c++-literals.rkt")
          racket/match)
 
-(begin-for-syntax
-  #;
-  (define (expand-c++ code)
-    (define (recur code)
-      (expand-c++ code))
-    #;
-    (printf "Expanding c++ ~a\n" code)
-    (define expanded (local-expand code 'expression #f))
-    (syntax-case expanded ()
-      [(sub ...) #'(sub::recur ...)
-
-       #;
-       (with-syntax ([(sub* ...) (map recur (syntax->list #'(sub ...)))])
-                   #'(sub* ...))]
-      [_ code]))
-  )
-
 (provide c++)
-#;
-(define c++ #f)
 
+;; the expander. doesn't deal with hygiene, it just calls a function whose
+;; type is 'syntax -> syntax'
 (define-for-syntax (expand-c++ form)
   (syntax-parse form
     [(something:id rest ...)
@@ -64,67 +47,6 @@
                                  (regexp-replace* #px"\n" what
                                                   (format "\t~a" indent-space))
                                  "\n")))
-
-#|
-(define (canonical-c++-infix code)
-  #f
-  )
-
-(define (canonical-c++-expression expression)
-  (match expression
-    [(list (list name args ...))
-     (format "~a(~a)" name (connect (map (lambda (x)
-                                           (format "~a" x))
-                                         args) ", "))]
-    [(list (and (? symbol?) name)) (format "~a" name)]
-    [else (canonical-c++-infix expression)]))
-
-(define (canonical-c++-body what)
-  (match what
-    [(list 'variable type name '= expression ...)
-     (format "~a ~a = ~a;" type name (canonical-c++-expression expression))]
-    [(list 'for (list initializer condition increment) body ...)
-     (format "for (~a; ~a ~a){\n~a\n}"
-             (canonical-c++-expression initializer)
-             (canonical-c++-expression condition)
-             (canonical-c++-expression increment)
-             (indent (connect (map canonical-c++-body body))))]
-    [(list 'class name super-class body ...)
-     (format "class ~a: public ~a {\n~a\n}\n" name super-class (connect (map (lambda (what)
-                                                                               (canonical-c++-class name what))
-                                                                             body)))]
-    [(list name '= expression ...)
-     (format "~a = ~a;" name (canonical-c++-expression expression))]
-    [(list name { list index-expression ... } '= expression ...)
-     (format "~a[~a] = ~a;" name index-expression (canonical-c++-expression expression))]
-    [else (format "~a;" (canonical-c++-expression (list what)))]))
-
-(define (canonical-c++-class-body name form)
-  (match form
-    [(list 'constructor (list args ...) (list members ...)
-           body ...)
-     (format "~a(){\n~a\n}" name (indent (connect (map canonical-c++-body body))))]
-    [else (canonical-c++-top form)]))
-
-(define (canonical-c++-class name body)
-  (match body
-    [(list 'public stuff ...)
-     (format "public:\n~a" (indent (connect (map (lambda (what)
-                                                   (canonical-c++-class-body name what))
-                                                 stuff))))]))
-|#
-
-#;
-(define (canonical-c++-top form)
-  (match form
-    [(list 'function type (list name args ...) body ...)
-     (format "~a ~a(){\n~a\n}" type name (indent (connect (map canonical-c++-body body))))]
-    [(list 'class name super-class body ...)
-     (format "class ~a: public ~a {\n~a\n}\n" name super-class (connect (map (lambda (what)
-                                                                               (canonical-c++-class name what))
-                                                                               body)))]
-    [else (error 'c++-top "what is ~a" form)]))
-
 (begin-for-syntax
   (define indent-space "    ")
   (define-recursive
@@ -256,12 +178,12 @@
       ))
 
   (define (canonical-c++-body body last?)
-    (define variable-failure "declaring a variable must have the form 'variable <type> <name> = <expression ...>'")
     (syntax-parse body #:literals (c++-variable c++-= c++-class)
-      [(~describe variable-failure (c++-variable ~!
-                     type:identifier name:identifier c++-= expression ...))
+      [(c++-variable type:identifier name:identifier c++-= expression ...)
        (format "~a ~a = ~a;" (raw-identifier #'type) (raw-identifier #'name)
                (canonical-c++-expression #'(expression ...)))]
+      [(c++-variable type:identifier name:identifier)
+       (format "~a ~a;" (raw-identifier #'type) (raw-identifier #'name))]
       [(variable:identifier assignment:c++-assignment-operator expression ...)
        (format "~a ~a ~a;" (raw-identifier #'variable)
                (raw-identifier #'assignment)
@@ -269,6 +191,10 @@
       #;
       [(c++-variable blah ...)
        (raise-syntax-error 'variable "declaring a variable must have the form 'variable <type> <name> = <expression ...>'" body)]
+      [(variable:identifier input:c++-input-operator expression ...)
+       (format "~a ~a ~a;" (raw-identifier #'variable)
+               (raw-identifier #'input)
+               (canonical-c++-expression #'(expression ...)))]
       [(array index:c++-inside-curlies c++-= expression ...)
        (format "~a[~a] = ~a;"
                (canonical-c++-expression #'(array))
@@ -326,7 +252,27 @@
                                     (raw-identifier #'template-type)
                                     (raw-identifier #'type)
                                     (raw-identifier #'variable))])
-   
+
+    (define-syntax-class c++-attribute
+                         #:literals (c++-static)
+      [pattern c++-static])
+
+    (define-splicing-syntax-class boring-const
+                                  #:literals (c++-const)
+      [pattern c++-const])
+    (define-splicing-syntax-class boring-reference
+                                  #:literals (c++-reference)
+      [pattern c++-reference])
+
+    (define-syntax-class function-argument
+                         #:literals (c++-const c++-reference)
+      [pattern ((~optional (~and c++-const const)) type:identifier
+                (~optional (~and c++-reference reference)) variable:identifier)
+               #:with final (format "~a~a ~a~a"
+                                    (if (attribute const) "const " "")
+                                    (raw-identifier #'type)
+                                    (if (attribute reference) "& " "")
+                                    (raw-identifier #'variable))])
     (syntax-parse form #:literals (c++-include c++-function c++-class
                                    c++-using c++-namespace)
       [(c++-include file:symbol-or-string ...)
@@ -341,8 +287,20 @@
                (indent (connect (syntax-map canonical-c++-top stuff ...))))]
       [(c++-using c++-namespace what:identifier)
        (format "using namespace ~a;" (raw-identifier #'what))]
-      [(c++-function type:id (name:id arg ...) body ...)
-       (format "~a ~a(){\n~a\n}" (raw-identifier #'type) (raw-identifier #'name)
+      [(c++-function modifier:c++-attribute ...
+                     type:id (name:id arg:function-argument ...) body ...)
+       (define (extra modifiers)
+         (if (null? modifiers)
+           ""
+           (string-append
+             (connect (map (lambda (x) (format "~a" (raw-identifier x)))
+                           (filter (lambda (x) x) modifiers))
+                      " ")
+             " ")))
+       (format "~a~a ~a(~a){\n~a\n}"
+               (extra (syntax->list #'(modifier ...)))
+               (raw-identifier #'type) (raw-identifier #'name)
+               (connect (syntax-map (lambda (x) (format "~a" (syntax-e x))) arg.final ...) ", ")
                (indent (connect (syntax-map (lambda (x)
                                               (canonical-c++-body x (last? (syntax->list #'(body ...)) x)))
                                             body
@@ -639,13 +597,16 @@
                      [c++-= =]
                      [c++--= -=] [c++-+= +=]
                      [c++-- -] [c++-/ /]
+                     [c++-<< <<]
                      [c++-public public]
                      [c++-constructor constructor]
+                     [c++-const const]
                      [c++-sizeof sizeof]
                      [c++-include include]
                      [c++-template template]
                      [c++-using using] [c++-namespace namespace]
                      [c++-static static]
+                     [c++-reference &]
                      [c++-struct struct]
                      [c++-local local]
                      #;

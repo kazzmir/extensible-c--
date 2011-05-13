@@ -7,6 +7,7 @@
          inside-curlies inside-brackets
          binary-operator
          operator
+         input-operator
          dotted-identifier)
 
 (define-literal-set operators #:for-template
@@ -15,6 +16,10 @@
 (define-syntax-class assignment-operator
                      #:literal-sets (operators)
                      [pattern (~or += -=)])
+
+(define-syntax-class input-operator
+                     #:literal-sets (operators)
+                     [pattern (~or <<)])
 
 (define-syntax-class inside-curlies
                      [pattern x #:when (eq? #\{ (syntax-property #'x 'paren-shape))])

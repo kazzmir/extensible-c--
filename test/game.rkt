@@ -63,40 +63,22 @@
                  ([string path]
                   [int z = 0])
       ())
-    ;; (constructor Background():z(0){}
 )
 
-#|
-	
-static double startingGameSpeed(){
-    return 1.0;
-}
+(function static double (startingGameSpeed)
+          1.0)
 
-/*
-static void stopLoading(Util::Thread::Id thread){
-    if (show_loading_screen){
-        Loader::stopLoading(thread);
-    }
-}
+(function static Network::Message (removeMessage [int id])
+    (variable Network::Message message)
 
-static void startLoading(Util::Thread::Id * thread, const Level::LevelInfo & info ){
-    if (show_loading_screen){
-        Loader::startLoading(thread, (void*) &info);
-    }
-}
-*/
+    (message.id = 0)
+    (message << World::REMOVE)
+    (message << id)
+    message
+)
 
-static Network::Message removeMessage(int id){
-    Network::Message message;
-
-    message.id = 0;
-    message << World::REMOVE;
-    message << id;
-
-    return message;
-}
-
-static vector<Background> readBackgrounds( const Filesystem::AbsolutePath & path ){
+(function static vector<Background> (readBackgrounds [const Filesystem::AbsolutePath & path])
+          #|
     vector<Background> backgrounds;
 
     try{
@@ -137,7 +119,10 @@ static vector<Background> readBackgrounds( const Filesystem::AbsolutePath & path
        */
 
     return backgrounds;
-}
+    |#
+)
+
+#|
 
 static string findNextFile( const char * name ){
     char buf[ 128 ];

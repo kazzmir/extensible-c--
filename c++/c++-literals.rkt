@@ -11,11 +11,8 @@
 
 ;; literal syntax anchors
 (define+provide-literals function class public
-                         variable
-                         local
-                         include struct
-                         using namespace
-                         template static
-                         constructor
-                         -= += =
+                         variable local include struct
+                         using namespace template static
+                         constructor const reference
+                         -= += = <<
                          - / sizeof)
