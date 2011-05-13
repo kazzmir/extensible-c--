@@ -78,48 +78,37 @@
 )
 
 (function static vector<Background> (readBackgrounds [const Filesystem::AbsolutePath & path])
-          #|
-    vector<Background> backgrounds;
+    (variable vector<Background> backgrounds)
 
-    try{
-        TokenReader reader( path.path() + "/bgs.txt" );
-        Token * head = reader.readToken();
+    (try {
+         (variable TokenReader (reader (path.path) + "/bgs.txt"))
+         (variable Token * head = (reader.readToken))
 
-        if ( *head == "backgrounds" ){
-            TokenView view = head->view();
-            while (view.hasMore()){
-                const Token * background;
-                view >> background;
-                if ( *background == "background" ){
-                    Background b;
-                    TokenView backgroundView = background->view();
-                    for ( int i = 0; i < 2; i++ ){
-                        const Token * next;
-                        backgroundView >> next;
-                        if ( *next == "path" ){
-                            next->view() >> b.path;
-                        } else if ( *next == "z" ){
-                            next->view() >> b.z;
-                        }
-                    }
-                    backgrounds.push_back(b);
-                }
-            }
-        }
+        (if (*head == "backgrounds")
+            (variable TokenView view = (head->view))
+            (while ((view.hasMore))
+                (variable const Token * background)
+                (view >> background)
+                (if (*background == "background")
+                    (variable Background b)
+                    (variable TokenView backgroundView = (background->view))
+                    (for ((variable int i = 0) (i < 2) (i += 1))
+                        (variable const Token * next)
+                        (backgroundView >> next)
+                        (if (*next == "path"){
+                            ((next->view) >> b.path)
+                        } else (if (*next == "z")
+                          ((next->view) >> b.z)
+                        )))
+                    (backgrounds.push_back b))
+             ))
 
-    } catch ( const TokenException & ex ){
-        Global::debug( 0 ) << "Could not load " + path.path() + "/bgs.txt because " << ex.getTrace() << endl;
     }
+    (catch [const TokenException & ex]
+        ;; ((Global::debug 0) << "Could not load " + path.path() + "/bgs.txt because " << ex.getTrace() << endl)
+    ))
 
-    /*
-       Background b1;
-       b1.path = path + "/versus/bg1.png";
-       b1.z = 420;
-       backgrounds.push_back( b1 );
-       */
-
-    return backgrounds;
-    |#
+    backgrounds
 )
 
 #|

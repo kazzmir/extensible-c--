@@ -14,5 +14,7 @@
                          variable local include struct
                          using namespace template static
                          constructor const reference
-                         -= += = <<
+                         try catch pointer if else
+                         while for
+                         -= += = << >>
                          - / sizeof)
