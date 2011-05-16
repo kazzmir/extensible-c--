@@ -6,6 +6,7 @@
                      syntax/parse
                      "utils.rkt"
                      "transformer.rkt"
+                     "debug.rkt"
                      (prefix-in c++- "c++.rkt")
                      )
          racket/list
@@ -110,13 +111,14 @@
                (canonical-c++-expression #'(expression))
                (canonical-c++-expression #'(flow1))
                (connect (syntax-map canonical-c++-expression (arg) ...) ", "))]
-      [((name arg ...))
-       (format "~a(~a)"
-               (canonical-c++-expression #'(name))
-               (connect (syntax-map canonical-c++-expression (arg) ...) ", "))]
       [(name:id) (format "~a" (raw-identifier #'name))]
       [(constant:str) (format "\"~a\"" (raw-identifier #'constant))]
       [(constant:number) (format "~a" (raw-identifier #'constant))]
+      [((name arg ...))
+       (debug "do a function from ~a - ~a\n" expression #'name)
+       (format "~a(~a)"
+               (canonical-c++-expression #'(name))
+               (connect (syntax-map canonical-c++-expression (arg) ...) ", "))]
       [else (canonical-c++-infix expression)]))
   (define (canonical-c++-class-body name form)
     (define-syntax-class declaration
@@ -145,10 +147,7 @@
        (format "~a()~a{\n~a\n}\n~a"
                (raw-identifier name)
                (initializer (syntax->list #'(member.init ...)))
-               (indent (connect (syntax-map (lambda (x)
-                                              (printf "body ~a\n" x)
-                                              (canonical-c++-body x #f))
-                                            body ...)))
+               (indent (canonical-c++-block #'(body ...) #f))
                (connect (syntax-map (lambda (x)
                                       (format "~a;" (syntax-e x)))
                                     member.final ...)))]
@@ -177,38 +176,101 @@
       
       ))
 
+  (define (canonical-c++-block body last?)
+    ;; (printf "do block ~a\n" body)
+    (define (is-last? list element)
+      (eq? (last list) element))
+    (connect (map (lambda (x)
+                    ;; (printf "body ~a\n" x)
+                    (canonical-c++-body x
+                                        (and last? (is-last? (syntax->list body) x))))
+                  (syntax->list body))))
+
   (define (canonical-c++-body body last?)
-    (syntax-parse body #:literals (c++-variable c++-= c++-class)
-      [(c++-variable type:identifier name:identifier c++-= expression ...)
-       (format "~a ~a = ~a;" (raw-identifier #'type) (raw-identifier #'name)
+    (debug "do body ~a\n" body)
+    (syntax-parse body #:literals (c++-variable c++-= c++-class c++-try
+                                   c++-for c++-else
+                                   c++-catch c++-if c++-while)
+      ;; int x = 2
+      [(c++-variable type:c++-type name:identifier c++-= expression ...)
+       (debug "here\n")
+       (format "~a ~a = ~a;" (raw-identifier #'type.final) (raw-identifier #'name)
                (canonical-c++-expression #'(expression ...)))]
-      [(c++-variable type:identifier name:identifier)
-       (format "~a ~a;" (raw-identifier #'type) (raw-identifier #'name))]
+      ;; Foo f(5)
+      [(c++-variable type:c++-type (name:identifier expression ...))
+       (debug "here\n")
+       (format "~a ~a(~a);" (raw-identifier #'type.final)
+               (raw-identifier #'name)
+               (canonical-c++-expression #'(expression ...)))]
+      ;; int x
+      [(c++-variable type:c++-type name:identifier)
+       (debug "here\n")
+       (format "~a ~a;" (raw-identifier #'type.final) (raw-identifier #'name))]
+      [(c++-variable ~! rest ...) (raise-syntax-error 'variable "invalid declaration of a variable" body)]
       [(variable:identifier assignment:c++-assignment-operator expression ...)
+       (debug "here\n")
        (format "~a ~a ~a;" (raw-identifier #'variable)
                (raw-identifier #'assignment)
                (canonical-c++-expression #'(expression ...)))]
+      [(c++-while (condition ...) body ...)
+       (debug "here\n")
+       (format "while (~a){\n~a\n}" (canonical-c++-expression #'(condition ...))
+               (indent (canonical-c++-block #'(body ...) last?)))]
+      [(c++-if (condition ...) body:c++-inside-curlies (~optional (~seq c++-else else-part)))
+       (debug "here\n")
+       (format "if (~a){\n~a\n}~a"
+               (canonical-c++-expression #'(condition ...))
+               (indent (canonical-c++-block #'body last?))
+               (if (attribute else-part)
+                 (format " else ~a"
+                         (syntax-parse #'else-part #:literals (c++-if)
+                           [(c++-if rest ...) (canonical-c++-body #'else-part last?)]
+                           [body:c++-inside-curlies (canonical-c++-block #'body last?)]
+                           [else (canonical-c++-body #'else-part last?)]))
+                 ""))]
+      [(c++-if (condition ...) body ... (~optional (~seq c++-else else-part)))
+       (debug "here\n")
+       (format "if (~a){\n~a\n}~a"
+               (canonical-c++-expression #'(condition ...))
+               (indent (canonical-c++-block #'(body ...) last?))
+               (if (attribute else-part)
+                 (syntax-parse #'else-part #:literals (c++-if)
+                   [(c++-if rest ...) (canonical-c++-body #'else last?)]
+                   [body:c++-inside-curlies (canonical-c++-block #'body last?)]
+                   [else (canonical-c++-body #'else-part last?)])
+                 ""))]
+      [(c++-try try-body (c++-catch exception:c++-function-argument catch-body ...))
+       (debug "here\n")
+       (format "try{\n~a\n} catch (~a){\n~a\n}"
+               (indent (canonical-c++-block #'try-body last?))
+               (syntax-e #'exception.final)
+               (indent (canonical-c++-block #'(catch-body ...) last?)))]
       #;
       [(c++-variable blah ...)
        (raise-syntax-error 'variable "declaring a variable must have the form 'variable <type> <name> = <expression ...>'" body)]
-      [(variable:identifier input:c++-input-operator expression ...)
-       (format "~a ~a ~a;" (raw-identifier #'variable)
-               (raw-identifier #'input)
-               (canonical-c++-expression #'(expression ...)))]
+      
       [(array index:c++-inside-curlies c++-= expression ...)
+       (debug "here\n")
        (format "~a[~a] = ~a;"
                (canonical-c++-expression #'(array))
                (canonical-c++-expression #'index)
                (canonical-c++-expression #'(expression ...)))]
       [(c++-for (initializer condition increment) body ...)
+       (debug "here\n")
        (format "for (~a; ~a; ~a){\n~a\n}"
                (canonical-c++-declaration #'initializer)
                (canonical-c++-expression #'condition)
                (canonical-c++-expression #'increment)
-               (indent (connect (syntax-map (lambda (x)
-                                              (canonical-c++-body x #f))
-                                            body ...))))]
+               (indent (canonical-c++-block #'(body ...) last?)))]
+      [(c++-for rest ...)
+       (raise-syntax-error 'for "invalid for syntax" body)]
+      [(taker input:c++-input-operator expression ...)
+       (debug "here\n")
+       (format "~a ~a ~a;" (canonical-c++-expression #'(taker))
+               (raw-identifier #'input)
+               (canonical-c++-expression #'(expression ...)))]
       [(c++-class name:id super-class:id body ...)
+       (debug "here\n")
        (format "class ~a: public ~a {\n~a\n};\n"
                (raw-identifier #'name)
                (raw-identifier #'super-class)
@@ -218,6 +280,7 @@
       [else (begin
               (define code (canonical-c++-expression
                              (with-syntax ([body body])
+                               (debug "do expression body ~a\n" #'body)
                                #'(body))))
               (if last?
                 (format "return ~a;" code)
@@ -225,8 +288,6 @@
       ))
 
   (define (canonical-c++-top form)
-    (define (last? stuff what)
-      (eq? (last stuff) what))
     #;
     (printf "top ~a\n" (syntax->datum form))
     (define-syntax-class symbol-or-string
@@ -264,6 +325,7 @@
                                   #:literals (c++-reference)
       [pattern c++-reference])
 
+    #;
     (define-syntax-class function-argument
                          #:literals (c++-const c++-reference)
       [pattern ((~optional (~and c++-const const)) type:identifier
@@ -288,7 +350,7 @@
       [(c++-using c++-namespace what:identifier)
        (format "using namespace ~a;" (raw-identifier #'what))]
       [(c++-function modifier:c++-attribute ...
-                     type:id (name:id arg:function-argument ...) body ...)
+                     type:id (name:id arg:c++-function-argument ...) body ...)
        (define (extra modifiers)
          (if (null? modifiers)
            ""
@@ -301,10 +363,7 @@
                (extra (syntax->list #'(modifier ...)))
                (raw-identifier #'type) (raw-identifier #'name)
                (connect (syntax-map (lambda (x) (format "~a" (syntax-e x))) arg.final ...) ", ")
-               (indent (connect (syntax-map (lambda (x)
-                                              (canonical-c++-body x (last? (syntax->list #'(body ...)) x)))
-                                            body
-                                            ...))))]
+               (indent (canonical-c++-block #'(body ...) #t)))]
       [declaration:declaration (format "~a;" (syntax-e #'declaration.final))]
       [else (raise-syntax-error 'top "unknown form" form)]
       ))
@@ -597,7 +656,7 @@
                      [c++-= =]
                      [c++--= -=] [c++-+= +=]
                      [c++-- -] [c++-/ /]
-                     [c++-<< <<]
+                     [c++-<< <<] [c++->> >>]
                      [c++-public public]
                      [c++-constructor constructor]
                      [c++-const const]
@@ -609,6 +668,11 @@
                      [c++-reference &]
                      [c++-struct struct]
                      [c++-local local]
+                     [c++-try try] [c++-catch catch]
+                     [c++-pointer *]
+                     [c++-if if] [c++-while while]
+                     [c++-else else]
+                     [c++-for for]
                      #;
                      [c++-top #%top]
                      [c++-define-syntax define-syntax]
