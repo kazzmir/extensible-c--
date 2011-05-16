@@ -14,7 +14,8 @@
                          variable local include struct
                          using namespace template static
                          constructor const reference
-                         signed unsigned
+                         signed unsigned enum
+                         return cast
                          try catch pointer if else
                          while for do
                          -= += = << >>

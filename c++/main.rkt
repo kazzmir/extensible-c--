@@ -98,9 +98,15 @@
     parsed)
 
   (define (canonical-c++-expression expression)
-    (syntax-parse expression #:literals (c++-sizeof)
+    (syntax-parse expression #:literals (c++-sizeof c++-cast)
       [((c++-sizeof arg))
        (format "sizeof(~a)" (canonical-c++-expression #'(arg)))]
+      [((c++-cast stuff ...))
+        (format "(~a)" (connect (syntax-map
+                                  (lambda (x)
+                                    (symbol->string (raw-identifier x)))
+                                  stuff ...)
+                                " "))]
       [((name:id index:c++-inside-curlies))
        (format "~a[~a]"
                (raw-identifier #'name)
@@ -193,7 +199,7 @@
   (define (canonical-c++-body body last?)
     (debug "do body ~a\n" body)
     (syntax-parse body #:literals (c++-variable c++-= c++-class c++-try
-                                   c++-for c++-else
+                                   c++-for c++-else c++-return
                                    c++-catch c++-if c++-while)
       ;; int x = 2
       [(c++-variable type:c++-type name:identifier c++-= expression ...)
@@ -290,6 +296,8 @@
                (raw-identifier #'super-class)
                (connect (syntax-map (lambda (what) (canonical-c++-class #'name what))
                                     body ...)))]
+      [(c++-return expression ...)
+       (format "return ~a" (canonical-c++-expression #'(expression ...)))]
       [() ""]
       [else (begin
               (define code (canonical-c++-expression
@@ -302,13 +310,14 @@
       ))
 
   (define (canonical-c++-top form)
-    #;
-    (printf "top ~a\n" (syntax->datum form))
+    (debug "top ~a\n" (syntax->datum form))
     (define-syntax-class symbol-or-string
       [pattern what:str #:with raw (format "\"~a\"" (syntax-e #'what))]
       [pattern what:identifier #:with raw (syntax-e #'what)])
     (define-syntax-class declaration
-                         #:literals (c++-template c++-class c++-static)
+                         #:literals (c++-template c++-class
+                                     c++-static c++-enum
+                                     c++-struct)
       [pattern (c++-static type:identifier variable:identifier c++-= expression ...)
                #:with final (format "static ~a ~a = ~a"
                                     (raw-identifier #'type)
@@ -321,6 +330,13 @@
                                                        (lambda (form)
                                                          (canonical-c++-class-body #'name form))
                                                        body ...))))]
+      [pattern (c++-enum name:identifier stuff ...)
+               #:with final (format "enum ~a{\n~a\n}"
+                                    (raw-identifier #'name)
+                                    (indent
+                                      (connect (syntax-map (lambda (x)
+                                                           (symbol->string (raw-identifier x)))
+                                                         stuff ...) ",\n")))]
       [pattern (c++-template (c++-class template-type:identifier)
                              type:identifier variable:identifier)
                #:with final (format "template <class ~a> ~a ~a"
@@ -688,8 +704,11 @@
                      [c++-try try] [c++-catch catch]
                      [c++-pointer *]
                      [c++-if if] [c++-while while] [c++-do do]
+                     [c++-return return]
                      [c++-else else]
+                     [c++-cast cast]
                      [c++-for for]
+                     [c++-enum enum]
                      #;
                      [c++-top #%top]
                      [c++-define-syntax define-syntax]

@@ -57,7 +57,6 @@
 
 (namespace Game
 
-
 (struct Background
     (constructor ()
                  ([string path]
@@ -156,51 +155,51 @@
     (font.printf x y color buffer "Press F1 to view this help" 0)
 )
 
+(namespace Game
+    (enum Input
+        Screenshot
+        Slowdown
+        Speedup
+        NormalSpeed
+        ReloadLevel
+        KillAllHumans
+        Pause
+        MiniMaps
+        ShowHelp
+        ShowFps
+        Quit
+        Console)
+)
+
+(function static void (doTakeScreenshot [const Graphics::Bitmap & work])
+    (variable string file = (findNextFile "paintown-screenshot.bmp"))
+    ((Global::debug 2) << "Saved screenshot to " << file << endl)
+    (work.save file)
+)
+
+; /* returns false if players cannot be respawned due to running out of lives */
+(function static bool (respawnPlayers [const vector<Paintown::Object*> & players] [World & world])
+    (for [(variable vector<Paintown::Object*>::const_iterator it = (players.begin))
+          (it != players.end)
+          (it++)]
+        (variable Paintown::Character * player = (cast Paintown::Character *) *it)
+        (if ((player->getHealth) <= 0)
+          (if ((player->spawnTime) == 0)
+                (player->deathReset)
+                (if ((player->getLives) == 0)
+                    (return false)
+                )
+                (world.addMessage (removeMessage (player->getId)))
+                (world.addObject player)
+                (world.addMessage (player->getCreateMessage))
+                (world.addMessage (player->movedMessage))
+                (world.addMessage (player->animationMessage))
+                ))
+    )
+    true
+)
+
 #|
-namespace Game{
-    enum Input{
-        Screenshot,
-        Slowdown,
-        Speedup,
-        NormalSpeed,
-        ReloadLevel,
-        KillAllHumans,
-        Pause,
-        MiniMaps,
-        ShowHelp,
-        ShowFps,
-        Quit,
-        Console,
-    };
-}
-
-static void doTakeScreenshot(const Graphics::Bitmap & work){
-    string file = findNextFile("paintown-screenshot.bmp");
-    Global::debug(2) << "Saved screenshot to " << file << endl;
-    work.save(file);
-}
-
-/* returns false if players cannot be respawned due to running out of lives */
-static bool respawnPlayers(const vector<Paintown::Object*> & players, World & world){
-    for ( vector< Paintown::Object * >::const_iterator it = players.begin(); it != players.end(); it++ ){
-        Paintown::Character * player = (Paintown::Character *) *it;
-        if ( player->getHealth() <= 0 ){
-            if ( player->spawnTime() == 0 ){
-                player->deathReset();
-                if ( player->getLives() == 0 ){
-                    return false;
-                }
-                world.addMessage( removeMessage( player->getId() ) );
-                world.addObject( player );
-                world.addMessage( player->getCreateMessage() );
-                world.addMessage( player->movedMessage() );
-                world.addMessage( player->animationMessage() );
-            }
-        }
-    }
-    return true;
-}
-
 enum MoveListInput{
     Quit,
     Up,
