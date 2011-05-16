@@ -114,6 +114,10 @@
       [(name:id) (format "~a" (raw-identifier #'name))]
       [(constant:str) (format "\"~a\"" (raw-identifier #'constant))]
       [(constant:number) (format "~a" (raw-identifier #'constant))]
+      [(constant:char)
+       (if (eq? #\0 (raw-identifier #'constant))
+         "'\\0'"
+         (format "'~a'" (raw-identifier #'constant)))]
       [((name arg ...))
        (debug "do a function from ~a - ~a\n" expression #'name)
        (format "~a(~a)"
@@ -203,9 +207,15 @@
                (raw-identifier #'name)
                (canonical-c++-expression #'(expression ...)))]
       ;; int x
-      [(c++-variable type:c++-type name:identifier)
+      [(c++-variable type:c++-type name:identifier (~optional array:c++-inside-brackets))
        (debug "here\n")
-       (format "~a ~a;" (raw-identifier #'type.final) (raw-identifier #'name))]
+       (format "~a ~a~a;"
+               (raw-identifier #'type.final)
+               (raw-identifier #'name)
+               (if (attribute array)
+                 (format "[~a]" (canonical-c++-expression #'array))
+                 "")
+               )]
       [(c++-variable ~! rest ...) (raise-syntax-error 'variable "invalid declaration of a variable" body)]
       [(variable:identifier assignment:c++-assignment-operator expression ...)
        (debug "here\n")
@@ -249,7 +259,7 @@
       [(c++-variable blah ...)
        (raise-syntax-error 'variable "declaring a variable must have the form 'variable <type> <name> = <expression ...>'" body)]
       
-      [(array index:c++-inside-curlies c++-= expression ...)
+      [(array index:c++-inside-brackets c++-= expression ...)
        (debug "here\n")
        (format "~a[~a] = ~a;"
                (canonical-c++-expression #'(array))
@@ -350,7 +360,7 @@
       [(c++-using c++-namespace what:identifier)
        (format "using namespace ~a;" (raw-identifier #'what))]
       [(c++-function modifier:c++-attribute ...
-                     type:id (name:id arg:c++-function-argument ...) body ...)
+                     type:identifier (name:id arg:c++-function-argument ...) body ...)
        (define (extra modifiers)
          (if (null? modifiers)
            ""
@@ -364,6 +374,8 @@
                (raw-identifier #'type) (raw-identifier #'name)
                (connect (syntax-map (lambda (x) (format "~a" (syntax-e x))) arg.final ...) ", ")
                (indent (canonical-c++-block #'(body ...) #t)))]
+      [(c++-function rest ...)
+       (raise-syntax-error 'function "invalid syntax" form)]
       [declaration:declaration (format "~a;" (syntax-e #'declaration.final))]
       [else (raise-syntax-error 'top "unknown form" form)]
       ))

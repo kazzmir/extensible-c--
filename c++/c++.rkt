@@ -47,14 +47,18 @@
 
 (provide function-argument)
 (define-syntax-class function-argument
-  #:literals (const reference)
+  #:literals (const reference pointer)
   [pattern ((~optional (~and const has-const)) type:identifier
-                                               (~optional (~and reference has-reference)) variable:identifier)
-           #:with final (format "~a~a ~a~a"
-                                (if (attribute has-const) "const " "")
-                                (raw-identifier #'type)
-                                (if (attribute has-reference) "& " "")
-                                (raw-identifier #'variable))])
+                                               (~optional (~and reference has-reference))
+                                               (~optional (~and pointer has-pointer))
+                                               variable:identifier)
+           #:with final (string-append 
+                          (if (attribute has-const) "const " "")
+                          (symbol->string (raw-identifier #'type))
+                          " "
+                          (if (attribute has-reference) "& " "")
+                          (if (attribute has-pointer) "* " "")
+                          (symbol->string (raw-identifier #'variable)))])
 
 (provide type)
 (define-splicing-syntax-class type

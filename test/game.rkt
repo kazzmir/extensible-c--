@@ -105,20 +105,19 @@
 
     }
     (catch [const TokenException & ex]
-        ;; ((Global::debug 0) << "Could not load " + path.path() + "/bgs.txt because " << ex.getTrace() << endl)
+        ((Global::debug 0) << "Could not load " + (path.path) + "/bgs.txt because " << (ex.getTrace) << endl)
     ))
 
     backgrounds
 )
 
-#|
-
-static string findNextFile( const char * name ){
-    char buf[ 128 ];
-    const char * extension = strchr( name, '.' );
-    char first[ 128 ];
-    strncpy( first, name, extension - name );
-    first[ extension - name ] = '\0';
+(function static string (findNextFile [const char * name])
+    (variable char buf[128])
+    (variable const char * extension = (strchr name #\.))
+    (variable char first[128])
+    (strncpy first name [extension - name])
+    (first[extension - name] = #\0)
+    #|
     unsigned int num = 0;
     sprintf( buf, "%s%u%s", first, num, extension );
     do{
@@ -129,7 +128,10 @@ static string findNextFile( const char * name ){
          */
     } while (num != 0 && Util::exists(buf));
     return string(buf);
-}
+    |#
+)
+
+#|
 
 static void drawHelp( const Font & font, int x, int y, int color, const Graphics::Bitmap & buffer ){
     font.printf( x, y, color, buffer, "Controls", 0 );
