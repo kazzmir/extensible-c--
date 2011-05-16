@@ -226,6 +226,10 @@
        (debug "here\n")
        (format "while (~a){\n~a\n}" (canonical-c++-expression #'(condition ...))
                (indent (canonical-c++-block #'(body ...) last?)))]
+      [(c++-do body:c++-inside-curlies c++-while (condition ...))
+       (format "do{\n~a\n} while (~a);"
+               (indent (canonical-c++-block #'body #f))
+               (canonical-c++-expression #'(condition ...)))]
       [(c++-if (condition ...) body:c++-inside-curlies (~optional (~seq c++-else else-part)))
        (debug "here\n")
        (format "if (~a){\n~a\n}~a"
@@ -369,11 +373,11 @@
                            (filter (lambda (x) x) modifiers))
                       " ")
              " ")))
-       (format "~a~a ~a(~a){\n~a\n}"
+       (format "~a~a ~a(~a){\n~a\n}\n"
                (extra (syntax->list #'(modifier ...)))
                (raw-identifier #'type) (raw-identifier #'name)
                (connect (syntax-map (lambda (x) (format "~a" (syntax-e x))) arg.final ...) ", ")
-               (indent (canonical-c++-block #'(body ...) #t)))]
+               (indent (canonical-c++-block #'(body ...) (not (eq? 'void (raw-identifier #'type))))))]
       [(c++-function rest ...)
        (raise-syntax-error 'function "invalid syntax" form)]
       [declaration:declaration (format "~a;" (syntax-e #'declaration.final))]
@@ -672,6 +676,7 @@
                      [c++-public public]
                      [c++-constructor constructor]
                      [c++-const const]
+                     [c++-unsigned unsigned] [c++-signed signed]
                      [c++-sizeof sizeof]
                      [c++-include include]
                      [c++-template template]
@@ -682,7 +687,7 @@
                      [c++-local local]
                      [c++-try try] [c++-catch catch]
                      [c++-pointer *]
-                     [c++-if if] [c++-while while]
+                     [c++-if if] [c++-while while] [c++-do do]
                      [c++-else else]
                      [c++-for for]
                      #;

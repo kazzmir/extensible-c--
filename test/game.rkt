@@ -117,46 +117,46 @@
     (variable char first[128])
     (strncpy first name [extension - name])
     (first[extension - name] = #\0)
-    #|
-    unsigned int num = 0;
-    sprintf( buf, "%s%u%s", first, num, extension );
-    do{
-        num += 1;
-        sprintf( buf, "%s%u%s", first, num, extension );
+    (variable unsigned int num = 0)
+    (sprintf buf "%s%u%s" first num extension)
+    (do{
+        (num += 1)
+        (sprintf buf "%s%u%s" first num extension)
+        #|
         /* num != 0 prevents an infinite loop in the extremely
          * remote case that the user has 2^32 files in the directory
          */
-    } while (num != 0 && Util::exists(buf));
-    return string(buf);
-    |#
+         |#
+    } while (num != 0 && (Util::exists buf)))
+    (string buf)
+)
+
+(function static void (drawHelp [const Font & font] [int x] [int y] [int color] [const Graphics::Bitmap & buffer])
+    (font.printf x y color buffer "Controls" 0)
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Up: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getUp)))
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Down: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getDown)))
+
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Left: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getLeft)))
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Right: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getRight)))
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Jump: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getJump)))
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Attack1: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getAttack1)))
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Attack2: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getAttack2)))
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Attack3: %s" 0 (Keyboard::keyToName ((Configuration::config 0).getAttack3)))
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Tab to hide/show minimap" 0)
+    (y += (font.getHeight) + 1)
+    (font.printf x y color buffer "Press F1 to view this help" 0)
 )
 
 #|
-
-static void drawHelp( const Font & font, int x, int y, int color, const Graphics::Bitmap & buffer ){
-    font.printf( x, y, color, buffer, "Controls", 0 );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Up: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getUp() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Down: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getDown() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Left: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getLeft() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Right: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getRight() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Jump: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getJump() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Attack1: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getAttack1() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Attack2: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getAttack2() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Attack3: %s", 0,  Keyboard::keyToName( Configuration::config( 0 ).getAttack3() ) );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Tab to hide/show minimap", 0 );
-    y += font.getHeight() + 1;
-    font.printf( x, y, color, buffer, "Press F1 to view this help", 0 );
-}
-
 namespace Game{
     enum Input{
         Screenshot,

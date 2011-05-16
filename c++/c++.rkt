@@ -62,10 +62,13 @@
 
 (provide type)
 (define-splicing-syntax-class type
-  #:literals (pointer const)
+  #:literals (pointer const signed unsigned)
   [pattern (~seq (~optional (~and const has-const)) type:identifier pointer)
            #:with final (format "~a~a*"
                                 (if (attribute has-const) "const " "")
                                 (raw-identifier #'type))]
-  [pattern (~seq type:identifier)
-           #:with final (format "~a" (raw-identifier #'type))])
+  [pattern (~seq (~optional (~and unsigned has-unsigned))
+                 type:identifier)
+           #:with final (string-append
+                          (if (attribute has-unsigned) "unsigned " "")
+                          (symbol->string (raw-identifier #'type)))])
