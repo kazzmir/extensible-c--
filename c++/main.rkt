@@ -112,11 +112,11 @@
                (raw-identifier #'name)
                (canonical-c++-expression #'index))]
       [(infix:c++-inside-brackets) (canonical-c++-infix #'infix)]
-      [((expression flow1:c++-dotted-identifier arg ...))
+      [((expression:c++-expression flow1:c++-dotted-identifier arg:c++-expression ...))
        (format "~a~a(~a)"
-               (canonical-c++-expression #'(expression))
+               (attribute expression.final)
                (canonical-c++-expression #'(flow1))
-               (connect (syntax-map canonical-c++-expression (arg) ...) ", "))]
+               (connect (attribute arg.final) ", "))]
       [(name:id) (format "~a" (raw-identifier #'name))]
       [(constant:str) (format "\"~a\"" (raw-identifier #'constant))]
       [(constant:number) (format "~a" (raw-identifier #'constant))]
@@ -202,16 +202,19 @@
                                    c++-for c++-else c++-return
                                    c++-catch c++-if c++-while)
       ;; int x = 2
-      [(c++-variable type:c++-type name:identifier c++-= expression ...)
+      [(c++-variable type:c++-type name:identifier c++-= expression:c++-expression)
        (debug "here\n")
-       (format "~a ~a = ~a;" (raw-identifier #'type.final) (raw-identifier #'name)
+       (format "~a ~a = ~a;"
+               (raw-identifier #'type.final) (raw-identifier #'name)
+               (attribute expression.final)
+               #;
                (canonical-c++-expression #'(expression ...)))]
       ;; Foo f(5)
-      [(c++-variable type:c++-type (name:identifier expression ...))
+      [(c++-variable type:c++-type (name:identifier expression:c++-expression))
        (debug "here\n")
        (format "~a ~a(~a);" (raw-identifier #'type.final)
                (raw-identifier #'name)
-               (canonical-c++-expression #'(expression ...)))]
+               (attribute expression.final))]
       ;; int x
       [(c++-variable type:c++-type name:identifier (~optional array:c++-inside-brackets))
        (debug "here\n")
@@ -228,9 +231,10 @@
        (format "~a ~a ~a;" (raw-identifier #'variable)
                (raw-identifier #'assignment)
                (canonical-c++-expression #'(expression ...)))]
-      [(c++-while (condition ...) body ...)
+      [(c++-while (condition:c++-expression) body ...)
        (debug "here\n")
-       (format "while (~a){\n~a\n}" (canonical-c++-expression #'(condition ...))
+       (format "while (~a){\n~a\n}"
+               (attribute condition.final)
                (indent (canonical-c++-block #'(body ...) last?)))]
       [(c++-do body:c++-inside-curlies c++-while (condition ...))
        (format "do{\n~a\n} while (~a);"
@@ -289,7 +293,7 @@
        (format "~a ~a ~a;" (canonical-c++-expression #'(taker))
                (raw-identifier #'input)
                (canonical-c++-expression #'(expression ...)))]
-      [(c++-class name:id super-class:id body ...)
+      [(c++-class name:identifier super-class:identifier body ...)
        (debug "here\n")
        (format "class ~a: public ~a {\n~a\n};\n"
                (raw-identifier #'name)
@@ -408,10 +412,12 @@
                                     "\n")))
 
   
+  #;
   (define (connect lines [separator "\n"])
     (apply string-append (add-between lines separator)))
   ))
 
+#;
 (define (connect lines [separator "\n"])
   (apply string-append (add-between lines separator)))
 

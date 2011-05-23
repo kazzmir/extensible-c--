@@ -8,6 +8,8 @@
                      )
          syntax/stx
          syntax/parse
+         racket/contract
+         (only-in racket/list add-between)
          )
 
 (define-syntax-rule (syntax-map function template ...)
@@ -205,6 +207,11 @@
                                    (letrec ([name (lambda (args ...) body ...)]
                                             ...)
                                      (values name ...))))
+
+(provide connect)
+(define/contract (connect lines [separator "\n"])
+                 (->* ((listof string?)) (string?) string?)
+  (apply string-append (add-between lines separator)))
 
 #|
 (provide syntax-parse/error)

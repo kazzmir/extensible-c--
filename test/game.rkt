@@ -199,23 +199,25 @@
     true
 )
 
-#|
-enum MoveListInput{
-    Quit,
-    Up,
-    Down
-};
+(enum MoveListInput
+    Quit
+    Up
+    Down)
 
-class OptionMoveList: public MenuOption {
-public:
-    OptionMoveList(const Token * token, Paintown::Player * player):
-    MenuOption(token),
-    player(player){
-        readName(token);
-    }
 
-    Paintown::Player * player;
+#;
+(class OptionMoveList MenuOption
+  (public
+    (constructor ([const Token * token]
+                  [Paintown::Player * player])
+                 ()
+        (readName token))
 
+    )
+
+    ;; Paintown::Player * player;
+
+    #|
     virtual ~OptionMoveList(){
     }
 
@@ -401,8 +403,10 @@ public:
     virtual void run(const Menu::Context &){
         showMoveList(player);
     }
-};
+    |#
+)
 
+#|
 class GameOptionFactory: public Menu::OptionFactory {
 public:
     GameOptionFactory(Paintown::Player * player):
