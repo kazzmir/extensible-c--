@@ -293,6 +293,8 @@
        (format "~a ~a ~a;" (canonical-c++-expression #'(taker))
                (raw-identifier #'input)
                (canonical-c++-expression #'(expression ...)))]
+      [class:c++-class-declaration (attribute class.final)]
+      #;
       [(c++-class name:identifier super-class:identifier body ...)
        (debug "here\n")
        (format "class ~a: public ~a {\n~a\n};\n"
@@ -323,19 +325,20 @@
                                      c++-static c++-enum
                                      c++-struct)
       [pattern (c++-static type:identifier variable:identifier c++-= expression ...)
-               #:with final (format "static ~a ~a = ~a"
+               #:attr final (format "static ~a ~a = ~a"
                                     (raw-identifier #'type)
                                     (raw-identifier #'variable)
                                     (canonical-c++-expression #'(expression ...)))]
       [pattern (c++-struct name:identifier body ...)
-               #:with final (format "struct ~a{\n~a\n}"
+               #:attr final (format "struct ~a{\n~a\n}"
                                     (raw-identifier #'name)
                                     (indent (connect (syntax-map
                                                        (lambda (form)
                                                          (canonical-c++-class-body #'name form))
                                                        body ...))))]
+      [pattern class:c++-class-declaration #:attr final (attribute class.final)]
       [pattern (c++-enum name:identifier stuff ...)
-               #:with final (format "enum ~a{\n~a\n}"
+               #:attr final (format "enum ~a{\n~a\n}"
                                     (raw-identifier #'name)
                                     (indent
                                       (connect (syntax-map (lambda (x)
@@ -343,7 +346,7 @@
                                                          stuff ...) ",\n")))]
       [pattern (c++-template (c++-class template-type:identifier)
                              type:identifier variable:identifier)
-               #:with final (format "template <class ~a> ~a ~a"
+               #:attr final (format "template <class ~a> ~a ~a"
                                     (raw-identifier #'template-type)
                                     (raw-identifier #'type)
                                     (raw-identifier #'variable))])
@@ -400,7 +403,7 @@
                (indent (canonical-c++-block #'(body ...) (not (eq? 'void (raw-identifier #'type))))))]
       [(c++-function rest ...)
        (raise-syntax-error 'function "invalid syntax" form)]
-      [declaration:declaration (format "~a;" (syntax-e #'declaration.final))]
+      [declaration:declaration (format "~a;" (attribute declaration.final))]
       [else (raise-syntax-error 'top "unknown form" form)]
       ))
 

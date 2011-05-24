@@ -125,8 +125,7 @@
                    (raw-identifier #'name)
                    (attribute index.final))]
   [pattern (~and (~seq structure:inside-brackets) (~seq infix:infix-expression))
-           #:attr final (attribute infix.final) ;;(canonical-c++-infix #'infix)
-           ]
+           #:attr final (attribute infix.final)]
   [pattern ((expression:expression flow1:dotted-identifier arg:single-expression ...))
            #:attr final
            (format "~a~a(~a)"
@@ -155,3 +154,17 @@
   [pattern x:infix-expression #:attr final (attribute x.final)
            ;;else (canonical-c++-infix expression)]
            ])
+
+(provide class-declaration)
+(define-syntax-class class-declaration
+  #:literals (class)
+  [pattern (class name:identifier super-class:identifier body ...)
+           #:attr final
+           (format "class ~a: public ~a {\n~a\n};\n"
+                   (raw-identifier #'name)
+                   (raw-identifier #'super-class)
+                   ""
+                   #;
+                   (connect (syntax-map (lambda (what) (canonical-c++-class #'name what))
+                                        body ...)))])
+

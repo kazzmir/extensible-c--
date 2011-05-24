@@ -204,8 +204,6 @@
     Up
     Down)
 
-
-#;
 (class OptionMoveList MenuOption
   (public
     (constructor ([const Token * token]
